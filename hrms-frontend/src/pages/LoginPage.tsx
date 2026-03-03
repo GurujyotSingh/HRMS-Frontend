@@ -1,5 +1,5 @@
 // src/pages/LoginPage.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelope, faLock, faSpinner, faExclamationCircle } from '@fortawesome/free-solid-svg-icons';
 
@@ -9,7 +9,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: { preventDefault: () => void; }) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -160,8 +160,8 @@ const LoginPage = () => {
               />
             </div>
           </div>
-
-          <div style={{ textAlign: 'right' }}>
+          
+          <div style={{ textAlign: 'center' }}>
             <button
               type="submit"
               disabled={loading}
