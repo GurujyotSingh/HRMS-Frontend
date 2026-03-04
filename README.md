@@ -12,10 +12,10 @@
    ```bash
    git clone https://github.com/GurujyotSingh/HRMS-Frontend.git
 
-   cd university-hrms
+   cd .\HRMS-Frontend\adv\src
+
    npm install
-   echo "VITE_API_URL=http://localhost:3000/api" > .env
-   
+     
 
    npm install react react-dom react-router-dom @fortawesome/fontawesome-svg-core @fortawesome/free-solid-svg-icons @fortawesome/free-regular-svg-icons @fortawesome/react-fontawesome recharts papaparse file-saver react-hook-form yup axios date-fns react-hot-toast zustand
 
