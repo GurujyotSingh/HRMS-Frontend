@@ -10,7 +10,7 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/university-hrms.git
+   git clone https://github.com/GurujyotSingh/HRMS-Frontend.git
 
    cd university-hrms
    npm install
