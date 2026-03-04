@@ -11,7 +11,7 @@ import {
   faDesktop,
   faTablet,
   faMobile,
-    faPrinter,
+    
   faWrench,
   faClock,
 
@@ -22,7 +22,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Equipment } from '../../../types/resource';
+import type { Equipment } from '../../../types/resource';
 import { formatDate } from '../../../utils/formatters';
 
 interface EquipmentRequest {

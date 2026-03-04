@@ -22,7 +22,7 @@ import Modal from '../../../components/ui/Modal';
 import Calendar from '../../../components/ui/Calendar';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Room, ResourceBooking } from '../../../types/resource';
+import type { Room, ResourceBooking } from '../../../types/resource';
 import { formatDate, formatTime } from '../../../utils/formatters';
 
 const RoomBooking: React.FC = () => {

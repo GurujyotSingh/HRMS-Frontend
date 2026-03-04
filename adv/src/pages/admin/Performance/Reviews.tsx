@@ -20,7 +20,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { PerformanceReview } from '../../../types/performance';
+import type { PerformanceReview } from '../../../types/performance';
 import { formatDate } from '../../../utils/formatters';
 
 const PerformanceReviews: React.FC = () => {

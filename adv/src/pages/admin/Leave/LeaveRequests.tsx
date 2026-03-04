@@ -20,7 +20,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { LeaveApplication } from '../../../types/leave';
+import type { LeaveApplication } from '../../../types/leave';
 import { formatDate } from '../../../utils/formatters';
 import { exportToCSV } from '../../../utils/exportUtils';
 

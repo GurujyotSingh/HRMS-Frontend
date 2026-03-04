@@ -16,7 +16,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Attendance } from '../../../types/attendance';
+import type { Attendance } from '../../../types/attendance';
 import { formatDate, formatTime } from '../../../utils/formatters';
 import { exportToCSV } from '../../../utils/exportUtils';
 

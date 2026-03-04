@@ -21,7 +21,7 @@ import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Employee } from '../../../types/employee';
+// import { Employee } from '../../../types/employee';
 
 const AddEmployee: React.FC = () => {
   const navigate = useNavigate();

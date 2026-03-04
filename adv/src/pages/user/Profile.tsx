@@ -18,11 +18,11 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import FormInput from '../../components/ui/FormInput';
+// import FormInput from '../../components/ui/FormInput';
 import Modal from '../../components/ui/Modal';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../hooks/useAuth';
-import { Employee } from '../../types/employee';
+import type { Employee } from '../../types/employee';
 import { formatDate } from '../../utils/formatters';
 
 const Profile: React.FC = () => {

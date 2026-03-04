@@ -13,12 +13,13 @@ import {
   faCalendar,
   faChartBar,
   faCog,
-  
   faChevronLeft,
   faChevronRight,
+  faSignOutAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { hasPermission } from '../../utils/permissions';
+import { useNavigate } from 'react-router-dom';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -26,26 +27,47 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const userRole = user?.role || 'Employee';
 
+  // Determine the base path based on user role
+  const getBasePath = () => {
+    switch(userRole) {
+      case 'HRAdmin':
+      case 'Director':
+        return '/admin';
+      case 'HOD':
+        return '/hod';
+      default:
+        return '/user';
+    }
+  };
+
+  const basePath = getBasePath();
+
   const menuItems = [
-    { path: '/dashboard', icon: faHome, label: 'Dashboard', roles: ['Employee', 'HOD', 'HRAdmin', 'Director'] },
-    { path: '/employees', icon: faUsers, label: 'Employees', roles: ['HRAdmin', 'Director'] },
-    { path: '/leave', icon: faCalendarAlt, label: 'Leave Management', roles: ['Employee', 'HOD', 'HRAdmin', 'Director'] },
-    { path: '/attendance', icon: faClock, label: 'Attendance', roles: ['Employee', 'HOD', 'HRAdmin'] },
-    { path: '/onboarding', icon: faUserPlus, label: 'Onboarding', roles: ['HRAdmin'] },
-    { path: '/performance', icon: faStar, label: 'Performance', roles: ['HOD', 'HRAdmin', 'Director'] },
-    { path: '/resources', icon: faLaptop, label: 'Resources', roles: ['Employee', 'HRAdmin'] },
-    { path: '/payroll', icon: faMoneyBill, label: 'Payroll', roles: ['HRAdmin', 'Director'] },
-    { path: '/calendar', icon: faCalendar, label: 'Calendar', roles: ['Employee', 'HOD', 'HRAdmin', 'Director'] },
-    { path: '/reports', icon: faChartBar, label: 'Reports', roles: ['HRAdmin', 'Director'] },
-    { path: '/settings', icon: faCog, label: 'Settings', roles: ['HRAdmin'] },
+    { path: `${basePath}/dashboard`, icon: faHome, label: 'Dashboard', roles: ['Employee', 'HOD', 'HRAdmin', 'Director'] },
+    { path: `${basePath}/employees`, icon: faUsers, label: 'Employees', roles: ['HRAdmin', 'Director'] },
+    { path: `${basePath}/leave`, icon: faCalendarAlt, label: 'Leave Management', roles: ['Employee', 'HOD', 'HRAdmin', 'Director'] },
+    { path: `${basePath}/attendance`, icon: faClock, label: 'Attendance', roles: ['Employee', 'HOD', 'HRAdmin'] },
+    { path: `${basePath}/onboarding`, icon: faUserPlus, label: 'Onboarding', roles: ['HRAdmin'] },
+    { path: `${basePath}/performance`, icon: faStar, label: 'Performance', roles: ['HOD', 'HRAdmin', 'Director'] },
+    { path: `${basePath}/resources`, icon: faLaptop, label: 'Resources', roles: ['Employee', 'HRAdmin'] },
+    { path: `${basePath}/payroll`, icon: faMoneyBill, label: 'Payroll', roles: ['HRAdmin', 'Director'] },
+    { path: `${basePath}/calendar`, icon: faCalendar, label: 'Calendar', roles: ['Employee', 'HOD', 'HRAdmin', 'Director'] },
+    { path: `${basePath}/reports`, icon: faChartBar, label: 'Reports', roles: ['HRAdmin', 'Director'] },
+    { path: `${basePath}/settings`, icon: faCog, label: 'Settings', roles: ['HRAdmin'] },
   ];
 
   const filteredMenu = menuItems.filter(item => 
     item.roles.includes(userRole) || hasPermission(user, item.label.toLowerCase())
   );
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <aside className={`sidebar ${isOpen ? 'open' : 'closed'}`}>
@@ -65,6 +87,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
             key={index}
             to={item.path}
             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            end={item.path.endsWith('dashboard')}
           >
             <FontAwesomeIcon icon={item.icon} />
             {isOpen && <span className="nav-label">{item.label}</span>}
@@ -88,6 +111,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
             </div>
           )}
         </div>
+        <button className="logout-btn" onClick={handleLogout}>
+          <FontAwesomeIcon icon={faSignOutAlt} />
+          {isOpen && <span>Logout</span>}
+        </button>
       </div>
     </aside>
   );

@@ -20,7 +20,7 @@ import Modal from '../../../components/ui/Modal';
 import FormInput from '../../../components/ui/FormInput';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { EmployeeTask } from '../../../types/employeeTask';
+import type { EmployeeTask } from '../../../types/employeeTask';
 import { formatDate } from '../../../utils/formatters';
 
 const OnboardingTasks: React.FC = () => {

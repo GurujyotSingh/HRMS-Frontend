@@ -23,7 +23,7 @@ import Tabs from '../../../components/ui/Tabs';
 import Table from '../../../components/ui/Table';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Employee } from '../../../types/employee';
+import type { Employee } from '../../../types/employee';
 import { formatDate, formatCurrency } from '../../../utils/formatters';
 
 const EmployeeDetails: React.FC = () => {

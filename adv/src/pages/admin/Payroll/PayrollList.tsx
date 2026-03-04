@@ -21,7 +21,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Payroll } from '../../../types/payroll';
+import type { Payroll } from '../../../types/payroll';
 import { formatDate, formatCurrency } from '../../../utils/formatters';
 import { exportToCSV, exportToPDF } from '../../../utils/exportUtils';
 

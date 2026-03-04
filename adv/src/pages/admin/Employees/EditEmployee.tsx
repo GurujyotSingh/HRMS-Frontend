@@ -13,7 +13,7 @@ import Button from '../../../components/ui/Button';
 import FormInput from '../../../components/ui/FormInput';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Employee } from '../../../types/employee';
+import type { Employee } from '../../../types/employee';
 
 const EditEmployee: React.FC = () => {
   const { id } = useParams<{ id: string }>();

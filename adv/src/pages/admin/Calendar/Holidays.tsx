@@ -18,7 +18,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Holiday } from '../../../types/calendar';
+import type { Holiday } from '../../../types/calendar';
 import { formatDate } from '../../../utils/formatters';
 
 const Holidays: React.FC = () => {

@@ -20,7 +20,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { TravelClaim } from '../../../types/resource';
+import type { TravelClaim } from '../../../types/resource';
 import { formatDate, formatCurrency } from '../../../utils/formatters';
 
 const TravelClaims: React.FC = () => {

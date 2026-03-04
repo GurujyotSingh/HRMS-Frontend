@@ -16,6 +16,7 @@ import {
   faBookOpen,
   faLaptop,
   faCoffee,
+  faMapMarkerAlt,
 } from '@fortawesome/free-solid-svg-icons';
 import { Link } from 'react-router-dom';
 import Card from '../../components/ui/Card';

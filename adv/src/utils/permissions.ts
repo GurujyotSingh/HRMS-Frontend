@@ -1,4 +1,4 @@
-import { User } from '../types/auth';
+import type {  User } from '../types/auth';
 
 export const PERMISSIONS = {
   // Employee permissions
@@ -33,47 +33,85 @@ export const PERMISSIONS = {
 
 export type Permission = keyof typeof PERMISSIONS;
 
-export const hasPermission = (user: User | null, permission: Permission): boolean => {
+export const hasPermission = (user: User | null | undefined, permission: string): boolean => {
+  // If user is null or undefined, no permissions
   if (!user) return false;
+
+  // Check if user has roles array
+  if (!user.roles || !Array.isArray(user.roles)) {
+    // Fallback to role string if available
+    if (user.role) {
+      // Admin/Director have all permissions
+      if (user.role === 'HRAdmin' || user.role === 'Director') {
+        return true;
+      }
+      
+      // HOD permissions
+      if (user.role === 'HOD') {
+        const hodPermissions = [
+          'view_department_employees',
+          'approve_leave',
+          'view_department_reports',
+          'conduct_performance_review',
+        ];
+        return hodPermissions.includes(permission);
+      }
+      
+      // Employee permissions
+      if (user.role === 'Employee') {
+        const employeePermissions = [
+          'view_own_profile',
+          'edit_own_profile',
+          'apply_leave',
+          'view_own_leaves',
+          'view_own_attendance',
+          'view_own_payslips',
+        ];
+        return employeePermissions.includes(permission);
+      }
+    }
+    return false;
+  }
 
   // Admin/Director have all permissions
   if (user.roles.some(r => r.name === 'HRAdmin' || r.name === 'Director')) {
     return true;
   }
 
-  // Check specific permissions
-  return user.permissions.some(p => p.code === permission);
+  // Check specific permissions from roles array
+  return user.permissions?.some(p => p.code === permission) || false;
 };
 
-export const hasAnyPermission = (user: User | null, permissions: Permission[]): boolean => {
+export const hasAnyPermission = (user: User | null | undefined, permissions: string[]): boolean => {
+  if (!user) return false;
   return permissions.some(p => hasPermission(user, p));
 };
 
-export const hasAllPermissions = (user: User | null, permissions: Permission[]): boolean => {
+export const hasAllPermissions = (user: User | null | undefined, permissions: string[]): boolean => {
+  if (!user) return false;
   return permissions.every(p => hasPermission(user, p));
 };
 
-export const getRolePermissions = (roleName: string): Permission[] => {
+export const getRolePermissions = (roleName: string): string[] => {
   switch (roleName) {
     case 'Employee':
       return [
-        'VIEW_OWN_PROFILE',
-        'EDIT_OWN_PROFILE',
-        'APPLY_LEAVE',
-        'VIEW_OWN_LEAVES',
-        'VIEW_OWN_ATTENDANCE',
-        'VIEW_OWN_PAYSLIPS',
+        'view_own_profile',
+        'edit_own_profile',
+        'apply_leave',
+        'view_own_leaves',
+        'view_own_attendance',
+        'view_own_payslips',
       ];
     case 'HOD':
       return [
-        'VIEW_DEPARTMENT_EMPLOYEES',
-        'APPROVE_LEAVE',
-        'VIEW_DEPARTMENT_REPORTS',
-        'CONDUCT_PERFORMANCE_REVIEW',
+        'view_department_employees',
+        'approve_leave',
+        'view_department_reports',
+        'conduct_performance_review',
         ...getRolePermissions('Employee'),
       ];
     case 'HRAdmin':
-      return Object.values(PERMISSIONS);
     case 'Director':
       return Object.values(PERMISSIONS);
     default:

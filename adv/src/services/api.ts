@@ -3,16 +3,18 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api
 class ApiService {
   private token: string | null = null;
 
+  constructor() {
+    // Load token from localStorage on initialization
+    this.token = localStorage.getItem('auth_token');
+  }
+
   setToken(token: string) {
     this.token = token;
     localStorage.setItem('auth_token', token);
   }
 
   getToken(): string | null {
-    if (!this.token) {
-      this.token = localStorage.getItem('auth_token');
-    }
-    return this.token;
+    return this.token || localStorage.getItem('auth_token');
   }
 
   clearToken() {
@@ -46,9 +48,11 @@ class ApiService {
       if (!response.ok) {
         if (response.status === 401) {
           this.clearToken();
-          window.location.href = '/login';
+          // Don't redirect here, let the component handle it
+          throw new Error('Unauthorized');
         }
-        throw new Error(`API Error: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `API Error: ${response.statusText}`);
       }
 
       return await response.json();
@@ -65,10 +69,10 @@ class ApiService {
     return this.request<T>(url, { method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data: any): Promise<T> {
+  async post<T>(endpoint: string, data?: any): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: data ? JSON.stringify(data) : undefined,
     });
   }
 

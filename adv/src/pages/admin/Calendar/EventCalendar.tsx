@@ -18,7 +18,7 @@ import Modal from '../../../components/ui/Modal';
 import Calendar from '../../../components/ui/Calendar';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { CalendarEvent } from '../../../types/calendar';
+import type { CalendarEvent } from '../../../types/calendar';
 import { formatDate, formatTime } from '../../../utils/formatters';
 
 const EventCalendar: React.FC = () => {

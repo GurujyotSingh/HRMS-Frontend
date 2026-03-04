@@ -15,7 +15,7 @@ import Table from '../../../components/ui/Table';
 import Modal from '../../../components/ui/Modal';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { LeaveBalance } from '../../../types/leave';
+import type { LeaveBalance } from '../../../types/leave';
 import { exportToCSV } from '../../../utils/exportUtils';
 
 interface LeaveBalanceWithEmployee extends LeaveBalance {

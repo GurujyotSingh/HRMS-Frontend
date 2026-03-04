@@ -17,7 +17,7 @@ import Button from '../../../components/ui/Button';
 import Chart from '../../../components/ui/Chart';
 import { useNotification } from '../../../hooks/useNotification';
 
-import { AnalyticsData } from '../../../types/report';
+import type { AnalyticsData } from '../../../types/report';
 import { formatCurrency, formatNumber } from '../../../utils/formatters';
 import { exportToCSV, exportToPDF } from '../../../utils/exportUtils';
 

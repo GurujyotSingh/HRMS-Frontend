@@ -15,7 +15,7 @@ import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Notification } from '../../../types/calendar';
+import type { Notification } from '../../../types/calendar';
 import { formatDate, formatTime } from '../../../utils/formatters';
 
 const Notifications: React.FC = () => {

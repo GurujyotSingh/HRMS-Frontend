@@ -105,8 +105,7 @@ import Maintenance from './pages/common/Maintenance';
 function App() {
   return (
     <Router>
-    console.log('App is rendering');
-console.log('Current path:', window.location.pathname);
+    
       <ThemeProvider>
         <AuthProvider>
           <NotificationProvider>

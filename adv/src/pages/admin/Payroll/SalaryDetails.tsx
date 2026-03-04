@@ -5,9 +5,7 @@ import {
   faArrowLeft,
   faEdit,
   faSave,
-  faHistory,
-  faChartLine,
-  faDownload,
+  
   faPrint,
 } from '@fortawesome/free-solid-svg-icons';
 import Card from '../../../components/ui/Card';
@@ -15,8 +13,8 @@ import Button from '../../../components/ui/Button';
 import Chart from '../../../components/ui/Chart';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { Employee } from '../../../types/employee';
-import { Payroll } from '../../../types/payroll';
+import type { Employee } from '../../../types/employee';
+import type { Payroll } from '../../../types/payroll';
 import { formatDate, formatCurrency } from '../../../utils/formatters';
 
 const SalaryDetails: React.FC = () => {

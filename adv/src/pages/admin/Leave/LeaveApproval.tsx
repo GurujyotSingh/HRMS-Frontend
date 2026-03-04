@@ -15,7 +15,7 @@ import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { useNotification } from '../../../hooks/useNotification';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { LeaveApplication } from '../../../types/leave';
+import type { LeaveApplication } from '../../../types/leave';
 import { formatDate } from '../../../utils/formatters';
 
 const LeaveApproval: React.FC = () => {
