@@ -29,6 +29,15 @@ export const PERMISSIONS = {
   OVERRIDE_APPROVALS: 'override_approvals',
   VIEW_BUDGET: 'view_budget',
   APPROVE_STRATEGIC_DECISIONS: 'approve_strategic_decisions',
+
+ VIEW_PAYROLL: 'view_payroll',
+  // PROCESS_PAYROLL: 'process_payroll',
+  VIEW_SALARY_HISTORY: 'view_salary_history',
+  EXPORT_FINANCIAL_REPORTS: 'export_financial_reports',
+  FLAG_PAYROLL_ISSUES: 'flag_payroll_issues',
+  VIEW_TAX_DETAILS: 'view_tax_details',
+  GENERATE_TAX_REPORTS: 'generate_tax_reports',
+  VIEW_FINANCIAL_DASHBOARD: 'view_financial_dashboard',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -79,7 +88,7 @@ export const hasPermission = (user: User | null | undefined, permission: string)
   }
 
   // Check specific permissions from roles array
-  return user.permissions?.some(p => p.code === permission) || false;
+  return user.permissions?.some((p: { code: string; }) => p.code === permission) || false;
 };
 
 export const hasAnyPermission = (user: User | null | undefined, permissions: string[]): boolean => {

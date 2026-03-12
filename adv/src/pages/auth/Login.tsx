@@ -271,9 +271,12 @@ const Login: React.FC = () => {
 
             {/* Demo credentials */}
             <div className="demo-credentials">
-              <p><strong>Admin:</strong> admin@university.edu / admin123</p>
-              <p><strong>HOD:</strong> hod@university.edu / hod123</p>
-              <p><strong>Employee:</strong> employee@university.edu / emp123</p>
+              
+  <p>👤 Admin: admin@university.edu / admin123</p>
+  <p>👤 HOD: hod@university.edu / hod123</p>
+  <p>👤 Employee: employee@university.edu / emp123</p>
+  <p>👤 Director: director@university.edu / director123</p>
+  <p>👤 Accountant: accountant@university.edu / acc123</p>
             </div>
 
           </form>

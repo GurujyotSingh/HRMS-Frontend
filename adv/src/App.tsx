@@ -1,4 +1,3 @@
-// src/App.tsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -10,6 +9,7 @@ import RoleBasedRoute from './components/auth/RoleBasedRoute';
 import AdminLayout from './components/layout/AdminLayout';
 import UserLayout from './components/layout/UserLayout';
 import PublicLayout from './components/layout/PublicLayout';
+import Layout from './components/Layout';
 
 // Auth Pages
 import Login from './pages/auth/Login';
@@ -97,6 +97,16 @@ import TaxDetails from './pages/user/Payroll/TaxDetails';
 // User Calendar
 import MyCalendar from './pages/user/Calendar/MyCalendar';
 
+// Accountant Pages
+import AccountantDashboard from './pages/accountant/Dashboard';
+import PayrollDetails from './pages/accountant/Payroll/PayrollDetails';
+import ProcessPayroll from './pages/accountant/Payroll/ProcessPayroll';
+import AccountantPayrollList from './pages/accountant/Payroll/PayrollList';
+import SalaryHistory from './pages/accountant/SalaryHistory/SalaryHistory';
+import TaxManagement from './pages/accountant/Tax/TaxManagement';
+import FinancialReports from './pages/accountant/Reports/FinancialReports';
+import PendingFlags from './pages/accountant/Pending/PendingFlags';
+
 // Common Pages
 import NotFound from './pages/common/NotFound';
 import Unauthorized from './pages/common/Unauthorized';
@@ -105,7 +115,6 @@ import Maintenance from './pages/common/Maintenance';
 function App() {
   return (
     <Router>
-    
       <ThemeProvider>
         <AuthProvider>
           <NotificationProvider>
@@ -185,11 +194,31 @@ function App() {
                   </RoleBasedRoute>
                 </ProtectedRoute>
               }>
+                <Route path="/hod" element={<Navigate to="/hod/dashboard" />} />
                 <Route path="/hod/dashboard" element={<AdminDashboard />} />
                 <Route path="/hod/leave" element={<LeaveRequests />} />
                 <Route path="/hod/leave/approval/:id" element={<LeaveApproval />} />
                 <Route path="/hod/attendance" element={<AttendanceLogs />} />
                 <Route path="/hod/performance" element={<PerformanceReviews />} />
+              </Route>
+
+              {/* Accountant Routes */}
+              <Route element={
+                <ProtectedRoute>
+                  <RoleBasedRoute allowedRoles={['Accountant', 'HRAdmin', 'Director']}>
+                    <Layout title="Accountant Dashboard" />
+                  </RoleBasedRoute>
+                </ProtectedRoute>
+              }>
+                <Route path="/accountant" element={<Navigate to="/accountant/dashboard" />} />
+                <Route path="/accountant/dashboard" element={<AccountantDashboard />} />
+                <Route path="/accountant/payroll" element={<AccountantPayrollList />} />
+                <Route path="/accountant/payroll/:id" element={<PayrollDetails />} />
+                <Route path="/accountant/payroll/process" element={<ProcessPayroll />} />
+                <Route path="/accountant/salary-history" element={<SalaryHistory />} />
+                <Route path="/accountant/tax" element={<TaxManagement />} />
+                <Route path="/accountant/reports" element={<FinancialReports />} />
+                <Route path="/accountant/pending" element={<PendingFlags />} />
               </Route>
 
               {/* User Routes */}
@@ -240,7 +269,6 @@ function App() {
         </AuthProvider>
       </ThemeProvider>
     </Router>
-    
   );
 }
 
