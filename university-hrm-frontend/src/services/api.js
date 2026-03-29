@@ -33,18 +33,22 @@ export const authAPI = {
 };
 
 export const employeesAPI = {
-  list: (params) => api.get('/employees', { params }),
-  get: (id) => api.get(`/employees/${id}`),
-  create: (data) => api.post('/employees', data),
-  me: () => api.get('/employees/me'),
-  updateMe: (data) => api.patch('/employees/me', data),
-};
+  list:     (params) => api.get('/employees/', { params }),
+  get:      (id)     => api.get(`/employees/${id}`),
+  create:   (data)   => api.post('/employees/', data),
+  update:   (id, d)  => api.put(`/employees/${id}`, d),
+  delete:   (id)     => api.delete(`/employees/${id}`),
+  me:       ()       => api.get('/employees/me'),
+  updateMe: (d)      => api.put('/employees/me', d),
+}
 
 export const deptAPI = {
-  list: () => api.get('/departments'),
-  create: (data) => api.post('/departments', data),
-};
-
+  list:   ()       => api.get('/departments/'),
+  get:    (id)     => api.get(`/departments/${id}`),
+  create: (data)   => api.post('/departments/', data),
+  update: (id, d)  => api.put(`/departments/${id}`, d),
+  delete: (id)     => api.delete(`/departments/${id}`),
+}
 export const leavesAPI = {
   myLeaves: () => api.get('/leaves/my'),
   apply: (data) => api.post('/leaves/apply', data),
