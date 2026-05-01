@@ -14,24 +14,24 @@ export declare class AiController {
     }>;
     getConversations(userId: string): Promise<{
         id: string;
-        updatedAt: Date;
-        createdAt: Date;
         messages: import("@prisma/client/runtime/library").JsonValue[];
+        createdAt: Date;
+        updatedAt: Date;
     }[]>;
     getConversation(id: string): Promise<{
         id: string;
-        updatedAt: Date;
-        createdAt: Date;
         userId: string;
         messages: import("@prisma/client/runtime/library").JsonValue[];
         context: import("@prisma/client/runtime/library").JsonValue | null;
+        createdAt: Date;
+        updatedAt: Date;
     } | null>;
     deleteConversation(id: string): Promise<{
         id: string;
-        updatedAt: Date;
-        createdAt: Date;
         userId: string;
         messages: import("@prisma/client/runtime/library").JsonValue[];
         context: import("@prisma/client/runtime/library").JsonValue | null;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
 }

@@ -144,7 +144,18 @@ export default function Chat() {
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
-          {sessions.map((s) => (
+          {sessions.map((s) => {
+            let chatTitle = `Chat ${s.id.substring(0, 8)}`;
+            if (s.title) {
+              chatTitle = s.title;
+            } else if (s.messages && s.messages.length > 0) {
+              const firstUserMsg = s.messages.find(m => m.role === 'user');
+              if (firstUserMsg && firstUserMsg.content) {
+                chatTitle = firstUserMsg.content.substring(0, 26) + (firstUserMsg.content.length > 26 ? '...' : '');
+              }
+            }
+
+            return (
             <div
               key={s.id}
               style={{
@@ -170,7 +181,7 @@ export default function Chat() {
                   }}
                 >
                   <MessageSquare size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                  {s.title || `Chat ${s.id.substring(0, 8)}`}
+                  {chatTitle}
                 </div>
               </div>
               <button
@@ -185,7 +196,8 @@ export default function Chat() {
                 <Trash2 size={14} />
               </button>
             </div>
-          ))}
+            );
+          })}
           {sessions.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center', color: 'var(--gray-500)', fontSize: 13 }}>
               No conversations yet

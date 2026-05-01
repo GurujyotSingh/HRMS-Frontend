@@ -47,7 +47,7 @@ export class AiService {
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: this.config.get<string>('ai.model') || 'llama3-70b-8192',
+          model: this.config.get<string>('ai.model') || 'llama-3.3-70b-versatile',
           messages: [
             { role: 'system', content: systemPrompt },
             ...conversation.messages.slice(-20),
@@ -56,7 +56,15 @@ export class AiService {
       });
 
       const data = await response.json() as { choices?: Array<{ message: { content: string } }>; error?: { message: string } };
-      const assistantMessage = data.choices?.[0]?.message?.content || 'Sorry, I could not process your request.';
+      
+      let assistantMessage = 'Sorry, I could not process your request.';
+      if (data.error) {
+        console.error('Groq API Error:', data.error);
+        assistantMessage = `AI Error: ${data.error.message || JSON.stringify(data.error)}`;
+      } else if (data.choices?.[0]?.message?.content) {
+        assistantMessage = data.choices[0].message.content;
+      }
+      
       conversation.messages.push({ role: 'assistant', content: assistantMessage });
 
       // Save conversation
