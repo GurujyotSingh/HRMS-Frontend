@@ -4,11 +4,11 @@ import { Card, Btn, Spinner, toast } from '../components/ui';
 import { Send, Plus, Trash2, MessageSquare, Bot, User } from 'lucide-react';
 
 const SUGGESTIONS = [
-  'Show me all pending leave requests',
-  'How many employees are in each department?',
-  'What is the payroll cost for this month?',
-  'Who has the most leave days remaining?',
-  'Generate an attendance summary report',
+  { text: 'Show me all pending leave requests', icon: '🏖️' },
+  { text: 'How many employees are in each department?', icon: '🏢' },
+  { text: 'What is the payroll cost for this month?', icon: '💰' },
+  { text: 'Who has the most leave days remaining?', icon: '📅' },
+  { text: 'Generate an attendance summary report', icon: '📊' },
 ];
 
 export default function Chat() {
@@ -209,9 +209,28 @@ export default function Chat() {
       {/* Chat Area */}
       <Card
         style={{
-          flex: 1, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          flex: 1, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative'
         }}
       >
+        <style>{`
+          .bouncing-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+          }
+          @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+            40% { transform: scale(1); opacity: 1; }
+          }
+          .spin-slow {
+            animation: spin 3s linear infinite;
+          }
+          @keyframes spin {
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
         {/* Messages */}
         <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
           {loading ? (
@@ -220,38 +239,45 @@ export default function Chat() {
             </div>
           ) : messages.length === 0 ? (
             /* Empty state with suggestions */
-            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <div style={{ textAlign: 'center', padding: '60px 20px', animation: 'fadeIn 0.5s ease-in-out' }}>
               <div
                 style={{
-                  width: 64, height: 64, borderRadius: '16px', background: 'rgba(30, 23, 96, 0.1)',
-                  color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+                  width: 72, height: 72, borderRadius: '20px', background: 'linear-gradient(135deg, rgba(30, 23, 96, 0.1) 0%, rgba(142, 45, 226, 0.1) 100%)',
+                  color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+                  boxShadow: '0 8px 24px rgba(30, 23, 96, 0.05)'
                 }}
               >
-                <Bot size={32} />
+                <Bot size={36} />
               </div>
-              <h3 style={{ marginBottom: 8 }}>HR AI Assistant</h3>
-              <p style={{ color: 'var(--gray-500)', fontSize: 14, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
-                Ask me anything about employees, leaves, attendance, payroll, or HR operations.
+              <h3 style={{ marginBottom: 12, fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--primary) 0%, #8e2de2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                HR AI Assistant ✨
+              </h3>
+              <p style={{ color: 'var(--gray-500)', fontSize: 15, marginBottom: 32, maxWidth: 450, margin: '0 auto 32px', lineHeight: 1.6 }}>
+                Hi there! 👋 I'm your intelligent HR companion. Ask me anything about employees, leaves, attendance, payroll, or day-to-day operations!
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 400, margin: '0 auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, maxWidth: 600, margin: '0 auto' }}>
                 {SUGGESTIONS.map((s) => (
                   <button
-                    key={s} onClick={() => handleSend(s)}
+                    key={s.text} onClick={() => handleSend(s.text)}
                     style={{
-                      padding: '10px 16px', border: '1px solid var(--border-color)', borderRadius: '6px',
-                      background: 'var(--white)', color: 'var(--text-dark)', fontSize: 13, cursor: 'pointer',
-                      textAlign: 'left', transition: 'all 0.15s',
+                      padding: '14px 18px', border: '1px solid var(--border-color)', borderRadius: '12px',
+                      background: 'var(--white)', color: 'var(--text-dark)', fontSize: 14, cursor: 'pointer',
+                      textAlign: 'left', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.borderColor = 'var(--primary)';
-                      e.currentTarget.style.background = 'rgba(30, 23, 96, 0.1)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(30, 23, 96, 0.08)';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.borderColor = 'var(--border-color)';
-                      e.currentTarget.style.background = 'var(--white)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
                     }}
                   >
-                    {s}
+                    <span style={{ fontSize: 20 }}>{s.icon}</span>
+                    <span style={{ flex: 1, fontWeight: 500 }}>{s.text}</span>
                   </button>
                 ))}
               </div>
@@ -264,40 +290,43 @@ export default function Chat() {
                   style={{
                     display: 'flex', gap: 12, marginBottom: 20,
                     justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                    animation: 'fadeIn 0.3s ease-in-out'
                   }}
                 >
                   {msg.role !== 'user' && (
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(30, 23, 96, 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Bot size={18} />
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(30, 23, 96, 0.1) 0%, rgba(142, 45, 226, 0.1) 100%)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Bot size={20} />
                     </div>
                   )}
                   <div
                     style={{
-                      maxWidth: '70%', padding: '12px 16px',
-                      borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                      background: msg.role === 'user' ? 'var(--primary)' : 'var(--gray-100)',
+                      maxWidth: '75%', padding: '14px 18px',
+                      borderRadius: msg.role === 'user' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                      background: msg.role === 'user' ? 'linear-gradient(135deg, var(--primary) 0%, #2b227c 100%)' : 'var(--gray-50)',
                       color: msg.role === 'user' ? 'var(--white)' : 'var(--text-dark)',
-                      fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      boxShadow: msg.role === 'user' ? '0 4px 12px rgba(30, 23, 96, 0.15)' : '0 2px 8px rgba(0,0,0,0.03)',
+                      border: msg.role === 'user' ? 'none' : '1px solid var(--border-color)',
+                      fontSize: 14.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                     }}
                   >
                     {msg.content}
                   </div>
                   {msg.role === 'user' && (
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)', color: 'var(--white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <User size={18} />
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary) 0%, #2b227c 100%)', color: 'var(--white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <User size={20} />
                     </div>
                   )}
                 </div>
               ))}
               {sending && (
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(30, 23, 96, 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Bot size={18} />
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(30, 23, 96, 0.1) 0%, rgba(142, 45, 226, 0.1) 100%)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Bot size={20} className="spin-slow" />
                   </div>
-                  <div style={{ padding: '12px 20px', background: 'var(--gray-100)', borderRadius: '16px 16px 16px 4px', display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={{ animation: 'pulse 1.5s infinite', fontSize: 20, lineHeight: 1 }}>•</span>
-                    <span style={{ animation: 'pulse 1.5s infinite 0.3s', fontSize: 20, lineHeight: 1 }}>•</span>
-                    <span style={{ animation: 'pulse 1.5s infinite 0.6s', fontSize: 20, lineHeight: 1 }}>•</span>
+                  <div style={{ padding: '16px 20px', background: 'var(--gray-50)', borderRadius: '20px 20px 20px 4px', border: '1px solid var(--border-color)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <div className="bouncing-dot" style={{ animationDelay: '0s' }}></div>
+                    <div className="bouncing-dot" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="bouncing-dot" style={{ animationDelay: '0.4s' }}></div>
                   </div>
                 </div>
               )}
