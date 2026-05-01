@@ -264,3 +264,17 @@ async def process_by_admin(db, leave_id, admin_user_id, action):
 
     await db.commit()
     return await _fetch_leave_with_relations(db, leave.id)
+
+async def update_leave_by_hr(db: AsyncSession, leave_id: int, hr_user_id: int, updates: dict) -> Leave:
+    result = await db.execute(select(Leave).options(selectinload(Leave.employee)).where(Leave.id == leave_id))
+    leave = result.scalar_one_or_none()
+    
+    if not leave:
+        raise ValueError("Leave not found")
+        
+    for k, v in updates.items():
+        if v is not None:
+            setattr(leave, k, v)
+            
+    await db.commit()
+    return await _fetch_leave_with_relations(db, leave.id)

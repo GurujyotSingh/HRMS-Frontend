@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Users,
@@ -7,130 +8,239 @@ import {
   CalendarDays,
   Clock,
   Wallet,
-  UserPlus,
-  TrendingUp,
+  ClipboardList,
+  BarChart3,
   MessageSquare,
-  ScrollText,
-  PanelLeftClose,
-  PanelLeft,
-  LogOut,
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Megaphone,
+  UserSearch,
+  Target,
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { Btn } from '../ui';
 
-const linkStyle = ({ isActive }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: '12px 14px',
-  borderRadius: 'var(--radius-sm)',
-  color: isActive ? 'var(--white)' : 'rgba(250,246,238,0.75)',
-  textDecoration: 'none',
-  fontSize: 14,
-  fontWeight: 500,
-  borderLeft: isActive ? '3px solid var(--terracotta)' : '3px solid transparent',
-  background: isActive ? 'rgba(196,98,45,0.2)' : 'transparent',
-});
+/**
+ * NAV_ITEMS — roles use the normalized internal role names:
+ *   admin, hr, hr_staff, director, faculty, staff
+ *
+ * HOD / department_head / head_of_department → DIRECTOR everywhere
+ * No role restriction = visible to all authenticated users
+ */
+const NAV_ITEMS = [
+  { section: 'Main' },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 
-export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
-  const { user, logout, hasRole } = useAuth();
-  const navigate = useNavigate();
+  { section: 'Management' },
+  { path: '/employees',   label: 'Employees',   icon: Users,       roles: ['admin', 'hr', 'hr_staff'] },
+  { path: '/departments', label: 'Departments', icon: Building2,   roles: ['admin', 'hr', 'hr_staff'] },
+  { path: '/recruitment', label: 'Recruitment', icon: UserSearch,  roles: ['admin', 'hr'] },
 
-  const items = [
-  { to: '/dashboard',   icon: '⊞', label: 'Dashboard',    roles: null },
-  { to: '/employees',   icon: '👥', label: 'Employees',    roles: ['admin', 'hr'] },
-  { to: '/departments', icon: '🏛', label: 'Departments',  roles: ['admin', 'hr'] },
-  { to: '/leaves',      icon: '🌿', label: 'Leave',        roles: null },
-  { to: '/attendance',  icon: '📋', label: 'Attendance',   roles: null },
-  { to: '/payroll',     icon: '💰', label: 'Payroll',      roles: ['admin', 'hr', 'accountant'] },
-  { to: '/onboarding',  icon: '🚪', label: 'Onboarding',   roles: ['admin', 'hr', 'employee'] },
-  { to: '/performance', icon: '📈', label: 'Performance',  roles: null },
-  { to: '/chat',        icon: '💬', label: 'AI Assistant', roles: null },
-  { to: '/audit',       icon: '🔍', label: 'Audit Logs',   roles: ['admin'] },
-].filter((i) => !i.roles || hasRole(...i.roles));  
+  { section: 'Operations' },
+  { path: '/leaves',      label: 'Leaves',      icon: CalendarDays },
+  { path: '/attendance',  label: 'Attendance',  icon: Clock },
+  { path: '/payroll',     label: 'Payroll',     icon: Wallet },
+  { path: '/onboarding',  label: 'Onboarding',  icon: ClipboardList },
+  { path: '/performance', label: 'Performance', icon: Target },
 
-  const w = collapsed ? 72 : 256;
+  { section: 'Communication' },
+  { path: '/announcements', label: 'Announcements', icon: Megaphone },
+
+  { section: 'Intelligence' },
+  { path: '/chat', label: 'AI Assistant', icon: MessageSquare },
+
+  { section: 'Admin' },
+  { path: '/reports',    label: 'Reports',    icon: BarChart3,  roles: ['admin', 'hr', 'director'] },
+  { path: '/audit-logs', label: 'Audit Logs', icon: ShieldCheck, roles: ['admin'] },
+];
+
+export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
+  const { hasRole } = useAuth();
+  const location = useLocation();
+
+  const filteredItems = NAV_ITEMS.filter((item) => {
+    if (item.section) return true;
+    if (!item.roles) return true;
+    return item.roles.some((r) => hasRole(r));
+  });
+
+  // Remove consecutive/trailing section headers (empty sections)
+  const visibleItems = filteredItems.filter((item, i, arr) => {
+    if (!item.section) return true;
+    const next = arr[i + 1];
+    return next && !next.section;
+  });
 
   return (
     <aside
+      className={`sidebar ${mobileOpen ? 'open' : ''}`}
       style={{
-        width: w,
-        minWidth: w,
-        background: 'var(--soil)',
-        color: 'var(--linen)',
+        width: collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)',
+        minHeight: '100vh',
+        background: 'var(--sidebar-bg)',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'width 0.2s ease',
-        borderRight: '1px solid var(--bark)',
+        transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        overflow: 'hidden',
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        zIndex: 100,
+        borderRight: '1px solid var(--sidebar-border)',
       }}
     >
-      <div style={{ padding: collapsed ? '16px 12px' : '20px 18px', borderBottom: '1px solid var(--bark)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: collapsed ? 24 : 28 }}>🎓</span>
-          {!collapsed && (
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700 }}>
-              UniHRM
-            </span>
-          )}
+      {/* Logo */}
+      <div
+        style={{
+          padding: collapsed ? '20px 0' : '20px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          borderBottom: '1px solid var(--sidebar-border)',
+          minHeight: 64,
+        }}
+      >
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: '0 4px 12px rgba(27, 110, 243, 0.3)',
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
         </div>
-      </div>
-
-      <nav style={{ flex: 1, padding: '12px 10px', overflowY: 'auto' }}>
-        {items.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} style={linkStyle} title={collapsed ? label : undefined}>
-            <Icon size={20} strokeWidth={1.75} />
-            {!collapsed && <span>{label}</span>}
-          </NavLink>
-        ))}
-      </nav>
-
-      <div style={{ padding: '12px 10px', borderTop: '1px solid var(--bark)' }}>
         {!collapsed && (
-          <div style={{ marginBottom: 12, padding: '0 8px' }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>
-              {user?.first_name
-                ? `${user.first_name} ${user.last_name || ''}`.trim()
-                : user?.email?.split('@')[0]}
+          <div style={{ animation: 'fadeIn 0.2s ease' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.2 }}>
+              UniHRM
             </div>
-            <div style={{ fontSize: 12, opacity: 0.65, textTransform: 'capitalize' }}>
-              {user?.role?.name?.replace(/_/g, ' ')}
+            <div style={{ fontSize: 10.5, color: 'var(--sidebar-text)', fontWeight: 400, letterSpacing: '0.02em' }}>
+              HR Management
             </div>
           </div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Btn
-            variant="ghost"
-            size="sm"
-            onClick={() => setCollapsed((c) => !c)}
-            style={{
-              color: 'var(--linen)',
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              width: '100%',
-            }}
-          >
-            {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
-            {!collapsed && <span style={{ marginLeft: 8 }}>Collapse</span>}
-          </Btn>
-          <Btn
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              logout();
-              navigate('/login');
-            }}
-            style={{
-              width: '100%',
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              background: 'var(--bark)',
-              color: 'var(--linen)',
-              borderColor: 'var(--bark)',
-            }}
-          >
-            <LogOut size={18} />
-            {!collapsed && <span style={{ marginLeft: 8 }}>Logout</span>}
-          </Btn>
-        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '12px 8px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+        }}
+      >
+        {visibleItems.map((item, i) => {
+          if (item.section) {
+            if (collapsed) return <div key={`s-${i}`} style={{ height: 16 }} />;
+            return (
+              <div
+                key={`s-${i}`}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--sidebar-section)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  padding: '16px 12px 6px',
+                  userSelect: 'none',
+                }}
+              >
+                {item.section}
+              </div>
+            );
+          }
+
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: collapsed ? '10px 0' : '8px 12px',
+                borderRadius: '6px',
+                textDecoration: 'none',
+                fontSize: 13,
+                fontWeight: isActive ? 600 : 400,
+                color: isActive ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
+                background: isActive ? 'var(--sidebar-active)' : 'transparent',
+                borderLeft: isActive ? '3px solid var(--sidebar-active-border)' : '3px solid transparent',
+                transition: 'all 0.15s ease',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                position: 'relative',
+                letterSpacing: '-0.01em',
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'var(--sidebar-hover)';
+                  e.currentTarget.style.color = 'var(--sidebar-text-hover)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--sidebar-text)';
+                }
+              }}
+              title={collapsed ? item.label : undefined}
+              onClick={() => setMobileOpen && setMobileOpen(false)}
+            >
+              <Icon size={18} strokeWidth={isActive ? 2 : 1.5} style={{ flexShrink: 0 }} />
+              {!collapsed && <span>{item.label}</span>}
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      {/* Collapse Button */}
+      <div style={{ padding: '12px 8px', borderTop: '1px solid var(--sidebar-border)' }}>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: 10,
+            padding: '8px 12px',
+            borderRadius: '6px',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--sidebar-text)',
+            fontSize: 12,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--sidebar-hover)';
+            e.currentTarget.style.color = 'var(--sidebar-text-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--sidebar-text)';
+          }}
+        >
+          {collapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={16} /> <span>Collapse</span></>}
+        </button>
       </div>
     </aside>
   );

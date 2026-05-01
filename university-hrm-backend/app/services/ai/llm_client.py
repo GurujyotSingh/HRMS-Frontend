@@ -1,12 +1,10 @@
 """
 LLM Client
 ----------
-Primary:  Anthropic Claude (claude-sonnet-4-6)
-Fallback: OpenAI GPT-4o  (if Claude fails or is rate-limited)
+Primary:  Groq (Llama 3 70b)
 
 Set these in your .env:
-    ANTHROPIC_API_KEY=sk-ant-...
-    OPENAI_API_KEY=sk-...         # optional, only needed for fallback
+    GROQ_API_KEY=gsk-...
 """
 
 import os
@@ -15,20 +13,15 @@ import httpx
 from typing import Any
 from app.core.config import settings
 
+GROQ_API_KEY = settings.GROQ_API_KEY
 
-from app.core.config import settings
-ANTHROPIC_API_KEY = settings.ANTHROPIC_API_KEY
-OPENAI_API_KEY = settings.OPENAI_API_KEY
-
-CLAUDE_MODEL = "claude-3-5-sonnet-20241022"
-OPENAI_MODEL = "gpt-4o"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # ── Blocked command keywords ──────────────────────────────────────────────────
 BLOCKED_KEYWORDS = [
     "kill", "drop", "truncate", "destroy", "wipe", "purge",
     "terminate", "nuke", "erase all", "delete all",
 ]
-
 
 def _contains_blocked_keyword(text: str) -> bool:
     lower = text.lower()
@@ -41,79 +34,24 @@ DESTRUCTIVE_KEYWORDS = [
     "update", "change", "edit", "modify", "set",
 ]
 
-
 def _is_destructive(text: str) -> bool:
     lower = text.lower()
     return any(kw in lower for kw in DESTRUCTIVE_KEYWORDS)
 
 
-# ── Claude call ───────────────────────────────────────────────────────────────
+# ── Groq call ───────────────────────────────────────────────────────────────
 
-async def call_claude(
+async def call_groq(
     messages: list[dict],
     system: str = "",
     tools: list[dict] | None = None,
     max_tokens: int = 2000,
 ) -> dict:
     """
-    Call Claude API.
-    Returns: {"content": str, "tool_use": dict|None, "tokens": int, "llm": "claude"}
+    Call Groq API using OpenAI compatibility layer.
     """
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-
-    body: dict[str, Any] = {
-        "model": CLAUDE_MODEL,
-        "max_tokens": max_tokens,
-        "messages": messages,
-    }
-    if system:
-        body["system"] = system
-    if tools:
-        body["tools"] = tools
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers=headers,
-            json=body,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-    text_content = ""
-    tool_use = None
-
-    for block in data.get("content", []):
-        if block.get("type") == "text":
-            text_content += block.get("text", "")
-        elif block.get("type") == "tool_use":
-            tool_use = {"name": block["name"], "input": block["input"], "id": block["id"]}
-
-    return {
-        "content": text_content.strip(),
-        "tool_use": tool_use,
-        "tokens": data.get("usage", {}).get("output_tokens", 0),
-        "llm": "claude",
-    }
-
-
-# ── OpenAI fallback ───────────────────────────────────────────────────────────
-
-async def call_openai(
-    messages: list[dict],
-    system: str = "",
-    max_tokens: int = 2000,
-) -> dict:
-    """
-    OpenAI GPT-4o fallback (no tool_use — used for text-only responses).
-    Returns: {"content": str, "tool_use": None, "tokens": int, "llm": "openai"}
-    """
-    if not OPENAI_API_KEY:
-        raise ValueError("OPENAI_API_KEY not set — cannot use fallback")
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set")
 
     full_messages = []
     if system:
@@ -121,31 +59,63 @@ async def call_openai(
     full_messages.extend(messages)
 
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
-    body = {
-        "model": OPENAI_MODEL,
+
+    body: dict[str, Any] = {
+        "model": GROQ_MODEL,
         "messages": full_messages,
         "max_tokens": max_tokens,
     }
+    
+    if tools:
+        # Map Anthropic tools schema to OpenAI compatibility format
+        body["tools"] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "parameters": t.get("input_schema", {"type": "object", "properties": {}})
+                }
+            }
+            for t in tools
+        ]
+        body["tool_choice"] = "auto"
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            "https://api.openai.com/v1/chat/completions",
+            "https://api.groq.com/openai/v1/chat/completions",
             headers=headers,
             json=body,
         )
         resp.raise_for_status()
         data = resp.json()
 
-    content = data["choices"][0]["message"]["content"]
-    tokens = data.get("usage", {}).get("completion_tokens", 0)
+    message = data["choices"][0]["message"]
+    content = message.get("content") or ""
+    
+    tool_use = None
+    if message.get("tool_calls"):
+        tool_call = message["tool_calls"][0]
+        tool_use = {
+            "name": tool_call["function"]["name"],
+            "input": json.loads(tool_call["function"]["arguments"]),
+            "id": tool_call["id"]
+        }
 
-    return {"content": content, "tool_use": None, "tokens": tokens, "llm": "openai"}
+    tokens = data.get("usage", {}).get("total_tokens", 0)
+
+    return {
+        "content": content.strip(),
+        "tool_use": tool_use,
+        "tokens": tokens,
+        "llm": "groq",
+    }
 
 
-# ── Main entry point with fallback ────────────────────────────────────────────
+# ── Main entry point ────────────────────────────────────────────
 
 async def call_llm(
     messages: list[dict],
@@ -154,8 +124,7 @@ async def call_llm(
     max_tokens: int = 2000,
 ) -> dict:
     """
-    Try Claude first. If it fails, fall back to OpenAI.
-    Raises ValueError if message contains blocked keywords.
+    Call Groq exclusively.
     """
     # Safety check
     last_user_msg = next(
@@ -163,17 +132,16 @@ async def call_llm(
     )
     if _contains_blocked_keyword(last_user_msg):
         raise ValueError(
-            "⛔ This command contains a restricted keyword and cannot be executed. "
-            "If you need to perform a bulk operation, please contact the system administrator."
+            "I apologize, but I am programmed to reject commands involving deletion, removal, or destructive actions for data security reasons."
         )
 
     try:
-        return await call_claude(messages, system, tools, max_tokens)
-    except Exception as claude_error:
-        print(f"[LLM] Claude failed: {claude_error}. Falling back to OpenAI...")
-        try:
-            return await call_openai(messages, system, max_tokens=max_tokens)
-        except Exception as openai_error:
-            raise RuntimeError(
-                f"Both Claude and OpenAI failed.\nClaude: {claude_error}\nOpenAI: {openai_error}"
-            )
+        return await call_groq(messages, system, tools, max_tokens)
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code
+        print(f"[LLM] Groq HTTP Error {status}: {e.response.text}")
+        if status == 429:
+            raise RuntimeError("The system is currently busy (rate limited). Please try asking again in a few moments.")
+        raise RuntimeError(f"I encountered a communication error with the AI engine. Please try again.")
+    except Exception:
+        raise RuntimeError("I am currently unable to process your request due to an internal timeout. Please try again later.")

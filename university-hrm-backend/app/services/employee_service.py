@@ -18,10 +18,28 @@ async def get_employees(db: AsyncSession, skip: int = 0, limit: int = 100):
 
 
 async def create_employee(db: AsyncSession, employee_in: EmployeeCreate):
+    from app.services.leave_balance_service import seed_balances_for_employee
+    from app.services.onboarding_service import seed_onboarding_for_employee
+    
     employee = Employee(**employee_in.model_dump())
     db.add(employee)
     await db.commit()
     await db.refresh(employee)
+
+    # Fetch user role securely for leave policies
+    user_result = await db.execute(select(User).where(User.id == employee.user_id))
+    user = user_result.scalar_one_or_none()
+    
+    if user:
+        from app.db.models.role import Role
+        role_result = await db.execute(select(Role).where(Role.id == user.role_id))
+        role = role_result.scalar_one_or_none()
+        role_name = role.name.value if role else "employee"
+        
+        # Provision initial DB objects
+        await seed_balances_for_employee(db, employee.id, role_name)
+        await seed_onboarding_for_employee(db, employee.id)
+
     return employee
 
 

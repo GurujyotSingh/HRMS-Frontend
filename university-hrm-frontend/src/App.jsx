@@ -6,7 +6,7 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
 
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
+import Dashboard from './components/Dashboard';
 import Employees from './pages/Employees';
 import Departments from './pages/Departments';
 import Leaves from './pages/Leaves';
@@ -16,127 +16,141 @@ import Onboarding from './pages/Onboarding';
 import Performance from './pages/Performance';
 import Chat from './pages/Chat';
 import AuditLogs from './pages/AuditLogs';
+import Reports from './pages/Reports';
 
+// Redirect if already logged in
 function LoginRoute({ children }) {
-  const { user } = useAuth();
-  const token = localStorage.getItem('hrm_token');
-  if (token && user) return <Navigate to="/dashboard" replace />;
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/dashboard" replace />;
   return children;
 }
+
+// Role constants — use DIRECTOR instead of HOD/department_head
+const MANAGE_ROLES = ['admin', 'hr'];
+const REPORT_ROLES = ['admin', 'hr', 'director'];
+const ADMIN_ONLY   = ['admin'];
 
 export default function App() {
   return (
     <>
       <ToastContainer />
       <Routes>
+        {/* ── Public ─────────────────────────────────────────── */}
         <Route
           path="/login"
-          element={
-            <LoginRoute>
-              <Login />
-            </LoginRoute>
-          }
+          element={<LoginRoute><Login /></LoginRoute>}
         />
+
+        {/* ── Dashboard (all authenticated users) ────────────── */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <AppLayout>
-                <Dashboard />
-              </AppLayout>
+              <AppLayout><Dashboard /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Employees & Departments (HR + Admin) ────────────── */}
         <Route
           path="/employees"
           element={
-            <ProtectedRoute roles={['admin', 'hr']}>
-              <AppLayout>
-                <Employees />
-              </AppLayout>
+            <ProtectedRoute roles={MANAGE_ROLES}>
+              <AppLayout><Employees /></AppLayout>
             </ProtectedRoute>
           }
         />
         <Route
           path="/departments"
           element={
-            <ProtectedRoute roles={['admin', 'hr']}>
-              <AppLayout>
-                <Departments />
-              </AppLayout>
+            <ProtectedRoute roles={MANAGE_ROLES}>
+              <AppLayout><Departments /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Leave (all) ─────────────────────────────────────── */}
         <Route
           path="/leaves"
           element={
             <ProtectedRoute>
-              <AppLayout>
-                <Leaves />
-              </AppLayout>
+              <AppLayout><Leaves /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Attendance (all) ────────────────────────────────── */}
         <Route
           path="/attendance"
           element={
             <ProtectedRoute>
-              <AppLayout>
-                <Attendance />
-              </AppLayout>
+              <AppLayout><Attendance /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Payroll ─────────────────────────────────────────── */}
         <Route
           path="/payroll"
           element={
-            <ProtectedRoute roles={['admin', 'hr', 'accountant']}>
-              <AppLayout>
-                <Payroll />
-              </AppLayout>
+            <ProtectedRoute>
+              <AppLayout><Payroll /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Onboarding ──────────────────────────────────────── */}
         <Route
           path="/onboarding"
           element={
             <ProtectedRoute>
-              <AppLayout>
-                <Onboarding />
-              </AppLayout>
+              <AppLayout><Onboarding /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Performance / Appraisals ─────────────────────────── */}
         <Route
           path="/performance"
           element={
             <ProtectedRoute>
-              <AppLayout>
-                <Performance />
-              </AppLayout>
+              <AppLayout><Performance /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── AI Assistant (all) ──────────────────────────────── */}
         <Route
           path="/chat"
           element={
             <ProtectedRoute>
-              <AppLayout>
-                <Chat />
-              </AppLayout>
+              <AppLayout><Chat /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Reports (HR + Director) ─────────────────────────── */}
         <Route
-          path="/audit"
+          path="/reports"
           element={
-            <ProtectedRoute roles={['admin']}>
-              <AppLayout>
-                <AuditLogs />
-              </AppLayout>
+            <ProtectedRoute roles={REPORT_ROLES}>
+              <AppLayout><Reports /></AppLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* ── Audit Logs (Admin only) ──────────────────────────── */}
+        <Route
+          path="/audit-logs"
+          element={
+            <ProtectedRoute roles={ADMIN_ONLY}>
+              <AppLayout><AuditLogs /></AppLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ── Fallbacks ───────────────────────────────────────── */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

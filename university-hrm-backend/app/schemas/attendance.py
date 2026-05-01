@@ -17,6 +17,10 @@ class AttendanceRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AttendanceUpdateHR(BaseModel):
+    clock_in: Optional[datetime] = None
+    clock_out: Optional[datetime] = None
+    status: Optional[str] = None
 class AttendanceSummary(BaseModel):
     """Monthly summary for a single employee."""
     employee_id: int

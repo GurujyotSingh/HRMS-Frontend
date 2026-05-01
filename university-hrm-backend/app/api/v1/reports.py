@@ -53,6 +53,16 @@ async def attendance_summary(
 
 
 @router.get(
+    "/attendance/weekly",
+    summary="HR: attendance summary for the current week (Mon-Fri)",
+)
+async def attendance_weekly(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+):
+    return await reports_service.attendance_weekly(db)
+
+@router.get(
     "/payroll/cost",
     response_model=PayrollCostReport,
     summary="HR: payroll cost report by department for a given month",

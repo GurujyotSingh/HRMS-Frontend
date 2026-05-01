@@ -9,5 +9,6 @@ class Settings(BaseSettings):
 	ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 	ANTHROPIC_API_KEY: str = ""   
 	OPENAI_API_KEY: str = ""       # optional, used as fallback only
+	GROQ_API_KEY: str = ""
 
 settings = Settings()

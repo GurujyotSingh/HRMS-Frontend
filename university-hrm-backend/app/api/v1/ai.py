@@ -86,6 +86,7 @@ async def get_sessions(
 ):
     result = await db.execute(
         select(ChatSession)
+        .options(selectinload(ChatSession.messages))
         .where(ChatSession.user_id == current_user.id)
         .order_by(ChatSession.updated_at.desc())
     )

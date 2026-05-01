@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.schemas.performance import (
     AppraisalCycleCreate, AppraisalCycleRead,
     GoalCreate, GoalSelfReview, GoalHODReview, GoalHRFinalize,
-    PerformanceGoalRead,
+    PerformanceGoalRead, GoalAssignHOD
 )
 from app.services import performance_service
 from app.services.employee_service import get_employee_by_user_id
@@ -115,6 +115,31 @@ async def my_goals(
 
 
 # ── HOD: review ───────────────────────────────────────────────────────────────
+
+@router.post("/goals/assign", response_model=PerformanceGoalRead, summary="HOD: Assign goal to an employee")
+async def hod_assign_goal(
+    data: GoalAssignHOD,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.DEPARTMENT_HEAD)),
+):
+    hod = await _resolve_employee(db, current_user.id)
+    if not hod.department_id:
+        raise HTTPException(status_code=400, detail="You have no department assigned")
+    
+    # Verify the target employee belongs to HOD's department
+    from app.services.employee_service import get_employee_by_id
+    target_emp = await get_employee_by_id(db, data.employee_id)
+    if not target_emp or target_emp.department_id != hod.department_id:
+        raise HTTPException(status_code=400, detail="Cannot assign goals outside your department")
+
+    # Create the goal acting as the employee
+    try:
+        from app.schemas.performance import GoalCreate
+        emp_goal_data = GoalCreate(cycle_id=data.cycle_id, goals_text=data.goals_text)
+        return await performance_service.create_goal(db, target_emp.id, emp_goal_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @router.get("/goals/hod/pending", response_model=list[PerformanceGoalRead], summary="HOD: view submitted goals in department")
 async def hod_pending_goals(

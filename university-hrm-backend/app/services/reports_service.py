@@ -140,7 +140,32 @@ async def payroll_cost_report(db: AsyncSession, month: int, year: int) -> Payrol
     )
 
 
-# ── 5. Onboarding completion report ──────────────────────────────────────────
+# ── 5. Weekly attendance report ────────────────────────────────────────────────
+
+async def attendance_weekly(db: AsyncSession):
+    import datetime
+    today = datetime.date.today()
+    start_of_week = today - datetime.timedelta(days=today.weekday())
+    
+    weekly_data = []
+    for i in range(5):  # Mon to Fri
+        day = start_of_week + datetime.timedelta(days=i)
+        result = await db.execute(
+            select(
+                func.count(Attendance.id).filter(Attendance.status == "present").label("present"),
+                func.count(Attendance.id).filter(Attendance.is_late == True).label("late"),
+            ).where(func.date(Attendance.date) == day)
+        )
+        row = result.first()
+        day_name = day.strftime("%a")
+        weekly_data.append({
+            "name": day_name,
+            "present": row.present or 0,
+            "late": row.late or 0,
+        })
+    return weekly_data
+
+# ── 6. Onboarding completion report ──────────────────────────────────────────
 
 async def onboarding_report(db: AsyncSession) -> OnboardingReport:
     result = await db.execute(

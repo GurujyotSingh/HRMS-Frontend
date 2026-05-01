@@ -29,6 +29,7 @@ from app.db.models import (
     payroll,
     performance,
     chat,
+    audit_log,
 )
 from alembic import context
 

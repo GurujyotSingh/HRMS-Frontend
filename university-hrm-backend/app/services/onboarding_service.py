@@ -11,6 +11,7 @@ from app.schemas.onboarding import (
     OnboardingTemplateCreate, OnboardingTaskCreate,
     OffboardingInitiate, OffboardingTaskCreate, ClearanceUpdate,
 )
+from app.db.models.employee import Employee
 
 
 def _utcnow() -> datetime:
@@ -212,6 +213,11 @@ DEFAULT_OFFBOARDING_TASKS = [
 async def initiate_offboarding(
     db: AsyncSession, data: OffboardingInitiate, hr_user_id: int
 ) -> OffboardingRecord:
+    # Check if employee exists
+    emp_result = await db.execute(select(Employee).where(Employee.id == data.employee_id))
+    if not emp_result.scalar_one_or_none():
+        raise ValueError(f"Employee with ID {data.employee_id} does not exist.")
+
     # Check if already offboarding
     result = await db.execute(
         select(OffboardingRecord).where(OffboardingRecord.employee_id == data.employee_id)

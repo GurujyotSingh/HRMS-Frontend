@@ -30,6 +30,12 @@ class GoalCreate(BaseModel):
     cycle_id: int
     goals_text: str
 
+class GoalAssignHOD(BaseModel):
+    """HOD forcibly assigns a goal to an employee."""
+    employee_id: int
+    cycle_id: int
+    goals_text: str
+
 
 class GoalSelfReview(BaseModel):
     """Employee submits self-rating at end of cycle."""

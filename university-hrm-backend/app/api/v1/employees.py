@@ -42,10 +42,10 @@ async def update_own_profile(
     return await update_employee(db, employee, employee_in)
 
 
-# ====================== HR + ADMIN ======================
+# ====================== HR + ADMIN + HOD ======================
 @router.get("/", response_model=list[EmployeeRead])
 async def list_all_employees(
-    current_user = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+    current_user = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN, RoleEnum.DEPARTMENT_HEAD)),
     db: AsyncSession = Depends(get_db),
     skip: int = 0,
     limit: int = 100,

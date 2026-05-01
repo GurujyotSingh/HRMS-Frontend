@@ -5,7 +5,7 @@ from app.api.deps import get_current_user, require_role
 from app.db.models.role import RoleEnum
 from app.db.models.user import User
 from app.db.session import get_db
-from app.schemas.attendance import AttendanceRead, AttendanceSummary
+from app.schemas.attendance import AttendanceRead, AttendanceSummary, AttendanceUpdateHR
 from app.services import attendance_service
 from app.services.employee_service import get_employee_by_user_id, get_employee_by_id
 
@@ -161,3 +161,20 @@ async def hr_auto_clock_out(
 ):
     count = await attendance_service.auto_clock_out_missing(db)
     return {"msg": f"Auto clocked out {count} employee(s)."}
+
+@router.patch(
+    "/hr/{attendance_id}",
+    response_model=AttendanceRead,
+    summary="HR: edit an attendance record manually",
+)
+async def hr_update_attendance(
+    attendance_id: int,
+    body: AttendanceUpdateHR,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+):
+    try:
+        updates = body.model_dump(exclude_unset=True)
+        return await attendance_service.update_attendance_by_hr(db, attendance_id, updates)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

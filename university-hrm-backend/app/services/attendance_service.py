@@ -117,6 +117,21 @@ async def auto_clock_out_missing(db: AsyncSession) -> int:
     await db.commit()
     return count
 
+async def update_attendance_by_hr(db: AsyncSession, attendance_id: int, updates: dict) -> Attendance:
+    result = await db.execute(select(Attendance).where(Attendance.id == attendance_id))
+    att = result.scalar_one_or_none()
+    
+    if not att:
+        raise ValueError("Attendance record not found")
+        
+    for k, v in updates.items():
+        if v is not None:
+            # We must correctly cast timestamps or strings if sent by the UI
+            setattr(att, k, v)
+            
+    await db.commit()
+    return att
+
 
 # ── Today's status ────────────────────────────────────────────────────────────
 

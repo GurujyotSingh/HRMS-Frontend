@@ -5,7 +5,8 @@ from app.api.deps import get_current_user, require_role
 from app.db.models.role import RoleEnum
 from app.db.models.user import User
 from app.db.session import get_db
-from app.schemas.leave import LeaveCreate, LeaveApproveHR, LeaveRead
+from app.db.session import get_db
+from app.schemas.leave import LeaveCreate, LeaveApproveHR, LeaveRead, LeaveUpdateHR
 from app.services import leave_service
 from app.services.employee_service import get_employee_by_user_id
 
@@ -176,6 +177,24 @@ async def hr_process_leave(
         return await leave_service.process_by_hr(db, leave_id, current_user.id, body.action)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.patch(
+    "/hr/{leave_id}",
+    response_model=LeaveRead,
+    summary="HR: edit a pending or approved leave record",
+)
+async def hr_update_leave(
+    leave_id: int,
+    body: LeaveUpdateHR,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR)),
+):
+    try:
+        updates = body.model_dump(exclude_unset=True)
+        return await leave_service.update_leave_by_hr(db, leave_id, current_user.id, updates)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.get(
     "/admin/queue",
     response_model=list[LeaveRead],

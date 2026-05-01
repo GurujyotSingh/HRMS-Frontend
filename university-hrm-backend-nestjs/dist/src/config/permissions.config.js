@@ -1,0 +1,88 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ROLE_PERMISSIONS = void 0;
+exports.hasPermission = hasPermission;
+exports.ROLE_PERMISSIONS = {
+    SUPER_ADMIN: ['*'],
+    DIRECTOR: [
+        'employees:view_department',
+        'employees:manage_department',
+        'leave:view_department',
+        'leave:approve_department',
+        'leave:approve_escalated',
+        'attendance:view_department',
+        'reports:generate_department',
+        'reports:view_department',
+        'onboarding:view',
+        'onboarding:approve_tasks',
+        'announcements:view',
+        'announcements:create_department',
+        'payroll:view_summary_department',
+        'recruitment:view',
+    ],
+    HR_MANAGER: [
+        'employees:view_all',
+        'employees:create',
+        'employees:edit_all',
+        'employees:deactivate',
+        'leave:view_all',
+        'leave:approve_all',
+        'leave:manage_policies',
+        'attendance:view_all',
+        'attendance:manage',
+        'payroll:view_all',
+        'payroll:process',
+        'recruitment:manage',
+        'onboarding:manage',
+        'announcements:manage',
+        'departments:manage',
+        'reports:view_all',
+        'reports:generate_all',
+        'settings:system',
+        'settings:ai',
+        'audit:view',
+        'notifications:manage',
+    ],
+    HR_STAFF: [
+        'employees:view_assigned',
+        'employees:edit_basic',
+        'leave:view_assigned',
+        'leave:process_assigned',
+        'attendance:view_assigned',
+        'onboarding:assist',
+        'recruitment:assist',
+        'announcements:view',
+        'announcements:create_general',
+    ],
+    FACULTY: [
+        'profile:view_own',
+        'profile:edit_own',
+        'leave:apply',
+        'leave:view_own',
+        'leave:cancel_own_pending',
+        'attendance:view_own',
+        'payroll:view_own',
+        'onboarding:view_own',
+        'onboarding:complete_own_tasks',
+        'announcements:view',
+    ],
+    STAFF: [
+        'profile:view_own',
+        'profile:edit_own',
+        'leave:apply',
+        'leave:view_own',
+        'leave:cancel_own_pending',
+        'attendance:view_own',
+        'payroll:view_own',
+        'onboarding:view_own',
+        'onboarding:complete_own_tasks',
+        'announcements:view',
+    ],
+};
+function hasPermission(role, permission) {
+    const perms = exports.ROLE_PERMISSIONS[role];
+    if (!perms)
+        return false;
+    return perms.includes('*') || perms.includes(permission);
+}
+//# sourceMappingURL=permissions.config.js.map

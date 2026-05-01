@@ -17,14 +17,24 @@ You are an intelligent HR assistant for a University HRM system.
 You help HR staff manage employees, leaves, attendance, payroll, onboarding, and performance.
 
 RULES:
-1. You can READ data freely without confirmation.
-2. For any UPDATE, REJECT, APPROVE, or OFFBOARD action — always ask for confirmation first.
-   Say: "I'm about to [action]. Please confirm by replying 'yes' or 'confirm'."
-3. Never perform DELETE ALL, DROP, TRUNCATE, or bulk destructive operations.
-4. Be concise and professional. Use bullet points for lists.
-5. If you don't have enough info, ask for it.
+1. You can READ and UPDATE data freely. No confirmation is required.
+2. Never perform DELETE ALL, DROP, TRUNCATE, or bulk destructive operations.
+3. Be concise and professional. Use bullet points for lists.
+4. If you don't have enough info, ask for it.
 6. Always use the available tools to fetch real data — never make up numbers.
 7. When displaying employee data, always show name + ID together.
+
+DATABASE SCHEMA:
+- users (id, email, is_active, role_id)
+- roles (id, name)
+- departments (id, name, description)
+- employees (id, user_id, department_id, employee_id, first_name, last_name, date_of_joining, designation, phone_number)
+- leaves (id, employee_id, leave_type, start_date, end_date, reason, status, manager_id)
+- leave_balances (id, employee_id, leave_type, total_days, used_days)
+- attendance (id, employee_id, date, clock_in, clock_out, is_late, total_hours)
+- payslips (id, employee_id, month, year, gross_salary, net_pay, status)
+- performance_cycles (id, title, year, status)
+- performance_goals (id, employee_id, cycle_id, goals_text, status, final_rating)
 """
 
 HR_TOOLS = [
@@ -116,14 +126,18 @@ HR_TOOLS = [
             "required": ["employee_id"],
         },
     },
+    {
+        "name": "run_read_only_sql",
+        "description": "Run a read-only PostgreSQL SELECT query to fetch custom data not available in other tools.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sql_query": {"type": "string", "description": "The exact SQL SELECT query to run (must start with SELECT)."}
+            },
+            "required": ["sql_query"],
+        },
+    },
 ]
-
-DESTRUCTIVE_TOOLS = {"approve_leave", "reject_leave"}
-
-
-def _needs_confirmation(tool_name: str) -> bool:
-    return tool_name in DESTRUCTIVE_TOOLS
-
 
 async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_user_id: int) -> str:
     """Execute tool — ALL queries use selectinload, no lazy loading anywhere."""
@@ -285,6 +299,31 @@ async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_us
         leave = await process_by_hr(db, tool_input["leave_id"], hr_user_id, "reject")
         return f"❌ Leave ID {leave.id} rejected. Status: {leave.status}"
 
+    elif tool_name == "run_read_only_sql":
+        from sqlalchemy import text
+        sql = tool_input["sql_query"].strip()
+        if not sql.lower().startswith("select"):
+            return "Error: Only SELECT queries are allowed for security reasons."
+        if any(bad in sql.lower() for bad in ["drop", "delete", "update", "insert", "truncate", "alter", ";", "--"]):
+            return "Error: Destructive SQL commands are strictly prohibited."
+        
+        try:
+            result = await db.execute(text(sql))
+            rows = result.fetchall()
+            keys = result.keys()
+            if not rows:
+                return "Query returned no results."
+            
+            lines = [f"Found {len(rows)} rows. Columns: {', '.join(keys)}"]
+            # Limit output length to prevent max_token overwhelm
+            for row in rows[:25]:
+                lines.append(str(dict(zip(keys, row))))
+            if len(rows) > 25:
+                lines.append("... (truncated to 25 rows)")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"SQL execution error: {str(e)}"
+
     return f"Unknown tool: {tool_name}"
 
 
@@ -349,33 +388,6 @@ async def run_hr_agent(
 ) -> dict:
     session = await get_or_create_session(db, hr_user_id, session_id)
 
-    # Confirmation flow
-    if confirm and session.messages:
-        last_msg = session.messages[-1]
-        if last_msg.pending_confirmation:
-            pending = json.loads(last_msg.pending_confirmation)
-            await _save_message(db, session.id, "user", user_message)
-            try:
-                result = await execute_tool(pending["tool_name"], pending["tool_input"], db, hr_user_id)
-                await _save_message(db, session.id, "assistant", result, llm_used="system")
-                return {
-                    "response": result,
-                    "session_id": session.id,
-                    "requires_confirmation": False,
-                    "pending_action": None,
-                    "llm_used": "system",
-                }
-            except Exception as e:
-                err = f"Action failed: {str(e)}"
-                await _save_message(db, session.id, "assistant", err)
-                return {
-                    "response": err,
-                    "session_id": session.id,
-                    "requires_confirmation": False,
-                    "pending_action": None,
-                    "llm_used": "system",
-                }
-
     # Save user message
     await _save_message(db, session.id, "user", user_message)
 
@@ -384,11 +396,14 @@ async def run_hr_agent(
         session.title = user_message[:80]
         await db.commit()
 
-    # Build history (last 20 messages)
+    # Build history (last 19 messages from DB)
     history = [
         {"role": m.role, "content": m.content}
-        for m in session.messages[-20:]
+        for m in session.messages[-19:]
     ]
+    
+    # Manually append the new user message since the async DB object hasn't refreshed relationships
+    history.append({"role": "user", "content": user_message})
 
     # Call LLM
     try:
@@ -409,7 +424,7 @@ async def run_hr_agent(
             "llm_used": "blocked",
         }
     except RuntimeError as e:
-        err = f"AI service unavailable: {str(e)}"
+        err = str(e)
         await _save_message(db, session.id, "assistant", err)
         return {
             "response": err,
@@ -424,33 +439,13 @@ async def run_hr_agent(
         tool_name = llm_result["tool_use"]["name"]
         tool_input = llm_result["tool_use"]["input"]
 
-        # Destructive — ask confirmation
-        if _needs_confirmation(tool_name):
-            pending = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-            action_word = "approve" if "approve" in tool_name else "reject"
-            confirm_msg = (
-                f"⚠️ I'm about to **{action_word} Leave ID {tool_input.get('leave_id')}**. "
-                f"Reply **'confirm'** to proceed or **'cancel'** to abort."
-            )
-            await _save_message(
-                db, session.id, "assistant", confirm_msg,
-                llm_used=llm_result["llm"], tokens=llm_result.get("tokens"), pending=pending
-            )
-            return {
-                "response": confirm_msg,
-                "session_id": session.id,
-                "requires_confirmation": True,
-                "pending_action": {"tool_name": tool_name, "tool_input": tool_input},
-                "llm_used": llm_result["llm"],
-            }
-
-        # Non-destructive — execute
+        # Directly execute all tools with no confirmation
         try:
             tool_result = await execute_tool(tool_name, tool_input, db, hr_user_id)
         except Exception as e:
             tool_result = f"Error executing {tool_name}: {str(e)}"
 
-        # Get natural language summary from Claude
+        # Get natural language summary from Claude/Groq
         summary_history = history + [
             {"role": "assistant", "content": f"[Tool result from {tool_name}]:\n{tool_result}"},
             {"role": "user", "content": "Summarize this clearly and concisely for the HR manager."},
@@ -475,6 +470,10 @@ async def run_hr_agent(
 
     # Plain text response
     response_text = llm_result["content"]
+    # Provide a fallback if LLM returned completely empty string natively
+    if not response_text or response_text.strip() == "":
+        response_text = "I have noted that. Can I help with anything else?"
+
     await _save_message(
         db, session.id, "assistant", response_text,
         llm_used=llm_result["llm"], tokens=llm_result.get("tokens")

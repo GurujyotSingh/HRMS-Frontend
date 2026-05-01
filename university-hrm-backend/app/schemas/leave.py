@@ -27,6 +27,19 @@ class LeaveApproveHR(BaseModel):
         return self
 
 
+class LeaveUpdateHR(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def end_after_start(self) -> "LeaveUpdateHR":
+        if self.start_date and self.end_date:
+            if self.end_date < self.start_date:
+                raise ValueError("end_date must be on or after start_date")
+        return self
+
+
 class LeaveRead(BaseModel):
     id: int
     employee_id: int
