@@ -81,7 +81,7 @@ export default function Chat() {
       const aiMsg = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: data?.data?.reply || data?.reply || data?.message || 'I processed your request.',
+        content: data?.data?.response || data?.response || data?.message || 'I processed your request.',
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch (e) {
@@ -170,7 +170,7 @@ export default function Chat() {
                   }}
                 >
                   <MessageSquare size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                  {s.title || `Chat ${s.id}`}
+                  {s.title || `Chat ${s.id.substring(0, 8)}`}
                 </div>
               </div>
               <button
@@ -246,9 +246,9 @@ export default function Chat() {
             </div>
           ) : (
             <>
-              {messages.map((msg) => (
+              {messages.map((msg, idx) => (
                 <div
-                  key={msg.id}
+                  key={msg.id || idx}
                   style={{
                     display: 'flex', gap: 12, marginBottom: 20,
                     justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',

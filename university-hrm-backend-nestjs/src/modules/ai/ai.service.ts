@@ -38,25 +38,25 @@ export class AiService {
 
     const systemPrompt = settings.aiSystemPrompt || `You are an HR assistant for a University HRMS. The user is ${user?.firstName} ${user?.lastName}, a ${user?.designation || user?.role} in the ${user?.department?.name || 'Unknown'} department. Help them with HR-related queries such as leave policies, payroll questions, onboarding tasks, and general HR guidance. Be professional, friendly, and concise.`;
 
-    // Call AI API (Anthropic Claude)
+    // Call AI API (Groq / OpenAI compatible)
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: this.config.get<string>('ai.model') || 'claude-sonnet-4-20250514',
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: conversation.messages.slice(-20), // Last 20 messages for context
+          model: this.config.get<string>('ai.model') || 'llama3-70b-8192',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...conversation.messages.slice(-20),
+          ],
         }),
       });
 
-      const data = await response.json() as { content?: Array<{ text: string }>; error?: { message: string } };
-      const assistantMessage = data.content?.[0]?.text || 'Sorry, I could not process your request.';
+      const data = await response.json() as { choices?: Array<{ message: { content: string } }>; error?: { message: string } };
+      const assistantMessage = data.choices?.[0]?.message?.content || 'Sorry, I could not process your request.';
       conversation.messages.push({ role: 'assistant', content: assistantMessage });
 
       // Save conversation
