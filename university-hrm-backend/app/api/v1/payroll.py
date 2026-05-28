@@ -11,16 +11,18 @@ from app.schemas.payroll import (
     PayslipGenerate, PayslipRead, PayslipSummary,
 )
 from app.services import payroll_service
-from app.services.employee_service import get_employee_by_user_id
 
 router = APIRouter(prefix="/payroll", tags=["Payroll"])
 
 
+# No separate employee table — user.id IS the employee_id
 async def _resolve_employee(db, user_id):
-    emp = await get_employee_by_user_id(db, user_id)
-    if not emp:
-        raise HTTPException(status_code=404, detail="Employee profile not found")
-    return emp
+    from sqlalchemy import select
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return user
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -37,7 +39,7 @@ async def _resolve_employee(db, user_id):
     ),
 )
 async def set_salary_structure(
-    employee_id: int,
+    employee_id: str,
     data: SalaryStructureCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
@@ -54,7 +56,7 @@ async def set_salary_structure(
     summary="HR: view an employee's salary structure",
 )
 async def get_salary_structure(
-    employee_id: int,
+    employee_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
@@ -111,7 +113,7 @@ async def generate_payslip(
     summary="HR: finalize a draft payslip (employee can view after this)",
 )
 async def finalize_payslip(
-    payslip_id: int,
+    payslip_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
@@ -127,7 +129,7 @@ async def finalize_payslip(
     summary="HR: recalculate a draft payslip (use if attendance was updated)",
 )
 async def regenerate_payslip(
-    payslip_id: int,
+    payslip_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
 ):

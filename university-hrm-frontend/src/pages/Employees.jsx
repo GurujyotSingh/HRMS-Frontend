@@ -15,8 +15,8 @@ export default function Employees() {
   
   const [form, setForm] = useState({
     email: '', password: '', role: 'STAFF',
-    firstName: '', lastName: '', employeeId: '',
-    joinDate: '', departmentId: '', designation: '',
+    first_name: '', last_name: '', employee_id: '',
+    join_date: '', department_id: '', designation: '',
   });
 
   const load = async () => {
@@ -39,8 +39,8 @@ export default function Employees() {
 
   const resetForm = () => setForm({
     email: '', password: '', role: 'STAFF',
-    firstName: '', lastName: '', employeeId: '',
-    joinDate: '', departmentId: '', designation: '',
+    first_name: '', last_name: '', employee_id: '',
+    join_date: '', department_id: '', designation: '',
   });
 
   const ROLE_PREFIX_MAP = {
@@ -55,15 +55,15 @@ export default function Employees() {
   useEffect(() => {
     if (showCreate) {
       const prefix = ROLE_PREFIX_MAP[form.role] || 'UNI-EMP-';
-      const roleEmployees = employees.filter(e => e.employeeId?.startsWith(prefix));
+      const roleEmployees = employees.filter(e => e.employee_id?.startsWith(prefix));
       let nextNum = 1;
       if (roleEmployees.length > 0) {
-        // NestJS returns camelCase
-        const sorted = roleEmployees.sort((a,b) => b.employeeId.localeCompare(a.employeeId));
-        const match = sorted[0].employeeId.match(/(\d+)$/);
+
+        const sorted = roleEmployees.sort((a,b) => b.employee_id.localeCompare(a.employee_id));
+        const match = sorted[0].employee_id.match(/(\d+)$/);
         if (match) nextNum = parseInt(match[1], 10) + 1;
       }
-      setForm(prev => ({ ...prev, employeeId: `${prefix}${nextNum.toString().padStart(3, '0')}` }));
+      setForm(prev => ({ ...prev, employee_id: `${prefix}${nextNum.toString().padStart(3, '0')}` }));
     }
   }, [form.role, showCreate, employees]);
 
@@ -75,11 +75,11 @@ export default function Employees() {
         email: form.email,
         password: form.password,
         role: form.role,
-        firstName: form.firstName,
-        lastName: form.lastName,
-        employeeId: form.employeeId,
-        joinDate: form.joinDate,
-        departmentId: form.departmentId || null,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        employee_id: form.employee_id,
+        join_date: form.join_date,
+        department_id: form.department_id || null,
         designation: form.designation || null,
         salary: null,
       });
@@ -99,11 +99,11 @@ export default function Employees() {
 
   const cols = [
     {
-      key: 'employeeId',
+      key: 'employee_id',
       label: 'Emp ID',
       render: (r) => (
         <span style={{ fontWeight: 600, color: 'var(--primary)', fontSize: 13 }}>
-          {r.employeeId}
+          {r.employee_id}
         </span>
       ),
     },
@@ -112,17 +112,17 @@ export default function Employees() {
       label: 'Name',
       render: (r) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Avatar name={`${r.firstName} ${r.lastName}`} size={32} />
+          <Avatar name={`${r.first_name} ${r.last_name}`} size={32} />
           <div>
-            <div style={{ fontWeight: 500 }}>{r.firstName} {r.lastName}</div>
+            <div style={{ fontWeight: 500 }}>{r.first_name} {r.last_name}</div>
             <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{r.email}</div>
           </div>
         </div>
       ),
     },
     { key: 'role', label: 'Role', render: (r) => <span style={{ fontSize: 12, fontWeight: 500 }}>{r.role.replace('_', ' ')}</span> },
-    { key: 'department', label: 'Department', render: (r) => getDeptName(r.departmentId) },
-    { key: 'joinDate', label: 'Date Joined', render: (r) => r.joinDate ? new Date(r.joinDate).toLocaleDateString() : '—' },
+    { key: 'department', label: 'Department', render: (r) => getDeptName(r.department_id) },
+    { key: 'join_date', label: 'Date Joined', render: (r) => r.join_date ? new Date(r.join_date).toLocaleDateString() : '—' },
     { key: 'status', label: 'Status', render: (r) => <Badge variant={r.status === 'ACTIVE' ? 'success' : 'danger'}>{r.status}</Badge> },
     {
       key: 'actions',
@@ -174,15 +174,15 @@ export default function Employees() {
             Employee Profile
           </h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-            <Input label="First Name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required id="emp-fn" />
-            <Input label="Last Name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required id="emp-ln" />
+            <Input label="First Name" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required id="emp-fn" />
+            <Input label="Last Name" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required id="emp-ln" />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-            <Input label="Employee ID (Auto-Generated)" value={form.employeeId} disabled required id="emp-id" />
-            <Input label="Date of Joining" type="date" value={form.joinDate} onChange={(e) => setForm({ ...form, joinDate: e.target.value })} required id="emp-doj" />
+            <Input label="Employee ID (Auto-Generated)" value={form.employee_id} disabled required id="emp-id" />
+            <Input label="Date of Joining" type="date" value={form.join_date} onChange={(e) => setForm({ ...form, join_date: e.target.value })} required id="emp-doj" />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-            <Select label="Department" value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} id="emp-dept">
+            <Select label="Department" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} id="emp-dept">
               <option value="">Select Department</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
@@ -202,17 +202,17 @@ export default function Employees() {
       <Modal open={!!showView} onClose={() => setShowView(null)} title="Employee Details" width={440}>
         {showView && (
           <div style={{ textAlign: 'center' }}>
-            <Avatar name={`${showView.firstName} ${showView.lastName}`} size={72} style={{ margin: '0 auto 16px' }} />
-            <h2 style={{ fontSize: 20, marginBottom: 4 }}>{showView.firstName} {showView.lastName}</h2>
+            <Avatar name={`${showView.first_name} ${showView.last_name}`} size={72} style={{ margin: '0 auto 16px' }} />
+            <h2 style={{ fontSize: 20, marginBottom: 4 }}>{showView.first_name} {showView.last_name}</h2>
             <p style={{ color: 'var(--gray-500)', fontSize: 14, marginBottom: 20 }}>{showView.email}</p>
 
             <div style={{ background: 'var(--gray-100)', borderRadius: '10px', padding: 20, textAlign: 'left' }}>
               {[
-                ['Employee ID', showView.employeeId],
+                ['Employee ID', showView.employee_id],
                 ['Role', showView.role.replace('_', ' ')],
-                ['Department', getDeptName(showView.departmentId)],
+                ['Department', getDeptName(showView.department_id)],
                 ['Designation', showView.designation],
-                ['Date of Joining', showView.joinDate ? new Date(showView.joinDate).toLocaleDateString() : '—'],
+                ['Date of Joining', showView.join_date ? new Date(showView.join_date).toLocaleDateString() : '—'],
                 ['Status', showView.status],
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--gray-200)', fontSize: 14 }}>

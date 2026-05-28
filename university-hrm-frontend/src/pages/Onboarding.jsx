@@ -16,7 +16,7 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(true);
 
   const [showInitOff, setShowInitOff] = useState(false);
-  const [offForm, setOffForm] = useState({ employeeId: '', reason: '', lastWorkingDate: '' });
+  const [offForm, setOffForm] = useState({ employee_id: '', reason: '', lastWorkingDate: '' });
   const [submitting, setSubmitting] = useState(false);
   const [viewOff, setViewOff] = useState(null);
 
@@ -96,13 +96,13 @@ export default function Onboarding() {
     setSubmitting(true);
     try {
       await onboardAPI.offInitiate({
-        employeeId: parseInt(offForm.employeeId),
+        employee_id: parseInt(offForm.employee_id),
         reason: offForm.reason,
         lastWorkingDate: offForm.lastWorkingDate,
       });
       toast('Offboarding initiated', 'success');
       setShowInitOff(false);
-      setOffForm({ employeeId: '', reason: '', lastWorkingDate: '' });
+      setOffForm({ employee_id: '', reason: '', lastWorkingDate: '' });
       loadData();
     } catch (e) {
       toast(e.response?.data?.message || 'Failed to initiate offboarding', 'error');
@@ -219,7 +219,7 @@ export default function Onboarding() {
               </div>
               <Table
                 cols={[
-                  { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}` },
+                  { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
                   { key: 'status', label: 'Status', render: (r) => (
                     <Badge variant={r.status === 'COMPLETED' ? 'success' : 'info'}>{r.status}</Badge>
                   )},
@@ -247,7 +247,7 @@ export default function Onboarding() {
           </div>
           <Table
             cols={[
-              { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}` },
+              { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
               { key: 'reason', label: 'Reason', render: (r) => r.reason || '—' },
               { key: 'lastWorkingDate', label: 'Last Day', render: (r) => new Date(r.lastWorkingDate).toLocaleDateString() },
               { key: 'clearanceStatus', label: 'Clearance', render: (r) => (
@@ -276,9 +276,9 @@ export default function Onboarding() {
       {/* Initiate Offboarding Modal */}
       <Modal open={showInitOff} onClose={() => setShowInitOff(false)} title="Initiate Offboarding" width={480}>
         <form onSubmit={handleInitiateOff}>
-          <Select label="Employee" value={offForm.employeeId} onChange={(e) => setOffForm({ ...offForm, employeeId: e.target.value })} required id="off-emp">
+          <Select label="Employee" value={offForm.employee_id} onChange={(e) => setOffForm({ ...offForm, employee_id: e.target.value })} required id="off-emp">
             <option value="">-- Select Employee --</option>
-            {empList.map((e) => <option key={e.id} value={e.id}>{e.firstName} {e.lastName} ({e.employeeId})</option>)}
+            {empList.map((e) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.employee_id})</option>)}
           </Select>
           <Textarea label="Reason" value={offForm.reason} onChange={(e) => setOffForm({ ...offForm, reason: e.target.value })} placeholder="Reason for offboarding" required id="off-reason" />
           <Input label="Last Working Date" type="date" value={offForm.lastWorkingDate} onChange={(e) => setOffForm({ ...offForm, lastWorkingDate: e.target.value })} required id="off-last" />
@@ -294,7 +294,7 @@ export default function Onboarding() {
         <Modal open={!!viewOff} onClose={() => setViewOff(null)} title="Offboarding Details" width={560}>
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div><strong>Employee:</strong> {viewOff.employee?.firstName} {viewOff.employee?.lastName}</div>
+              <div><strong>Employee:</strong> {viewOff.employee?.first_name} {viewOff.employee?.last_name}</div>
               <div><strong>Last Working Date:</strong> {new Date(viewOff.lastWorkingDate).toLocaleDateString()}</div>
               <div><strong>Status:</strong> <Badge variant="info">{viewOff.status}</Badge></div>
               <div><strong>Clearance:</strong> <Badge variant="warning">{viewOff.clearanceStatus}</Badge></div>

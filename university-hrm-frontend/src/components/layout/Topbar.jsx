@@ -18,8 +18,8 @@ export default function Topbar({ theme, toggleTheme, setMobileOpen }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const displayName = user?.firstName
-    ? `${user.firstName} ${user.lastName || ''}`.trim()
+  const displayName = user?.first_name
+    ? `${user.first_name} ${user.last_name || ''}`.trim()
     : user?.first_name
     ? `${user.first_name} ${user.last_name || ''}`.trim()
     : user?.email?.split('@')[0] || 'User';

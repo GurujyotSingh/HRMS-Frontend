@@ -69,21 +69,23 @@ def _get_ip(request: Optional[Request]) -> Optional[str]:
 async def audit(
     db: AsyncSession,
     action: str,
-    user_id: Optional[int] = None,
+    user_id: Optional[str] = None,
     user_email: Optional[str] = None,
     resource: Optional[str] = None,
-    resource_id: Optional[int] = None,
+    resource_id: Optional[str] = None,
     detail: Optional[str] = None,
     status: str = "success",
     request: Optional[Request] = None,
 ) -> AuditLog:
     """Write one audit log entry."""
+    import uuid as _uuid
     log = AuditLog(
-        user_id=user_id,
+        id=str(_uuid.uuid4()),
+        user_id=str(user_id) if user_id else None,
         user_email=user_email,
         action=action,
         resource=resource,
-        resource_id=resource_id,
+        resource_id=str(resource_id) if resource_id else None,
         detail=detail,
         ip_address=_get_ip(request),
         status=status,
@@ -99,7 +101,7 @@ async def audit(
 
 async def get_audit_logs(
     db: AsyncSession,
-    user_id: Optional[int] = None,
+    user_id: Optional[str] = None,
     action: Optional[str] = None,
     resource: Optional[str] = None,
     limit: int = 100,

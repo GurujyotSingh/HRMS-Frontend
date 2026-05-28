@@ -25,15 +25,13 @@ RULES:
 7. When displaying employee data, always show name + ID together.
 
 DATABASE SCHEMA:
-- users (id, email, is_active, role_id)
-- roles (id, name)
-- departments (id, name, description)
-- employees (id, user_id, department_id, employee_id, first_name, last_name, date_of_joining, designation, phone_number)
-- leaves (id, employee_id, leave_type, start_date, end_date, reason, status, manager_id)
-- leave_balances (id, employee_id, leave_type, total_days, used_days)
-- attendance (id, employee_id, date, clock_in, clock_out, is_late, total_hours)
-- payslips (id, employee_id, month, year, gross_salary, net_pay, status)
-- performance_cycles (id, title, year, status)
+- users (id, employee_id, email, first_name, last_name, role, department_id, join_date)
+- departments (id, name, code)
+- leave_requests (id, employee_id, leave_type, from_date, to_date, reason, status)
+- leave_balances (id, employee_id, year, annual_total, sick_used, etc)
+- attendance (id, employee_id, date, check_in, check_out, is_late)
+- payslips (id, employee_id, month, year, gross_salary, net_salary, status)
+- appraisal_cycles (id, title, year, status)
 - performance_goals (id, employee_id, cycle_id, goals_text, status, final_rating)
 """
 
@@ -143,14 +141,12 @@ async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_us
     """Execute tool — ALL queries use selectinload, no lazy loading anywhere."""
 
     if tool_name == "get_pending_leaves":
-        from app.db.models.leave import Leave
-        from app.db.models.employee import Employee
-        from app.db.models.enums import LeaveStatus
+        from app.db.models.leave_request import LeaveRequest
 
         result = await db.execute(
-            select(Leave)
-            .options(selectinload(Leave.employee))
-            .where(Leave.status == LeaveStatus.PENDING)
+            select(LeaveRequest)
+            .options(selectinload(LeaveRequest.employee))
+            .where(LeaveRequest.status == "PENDING")
         )
         leaves = result.scalars().all()
         if not leaves:
@@ -160,25 +156,20 @@ async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_us
             emp_name = f"{l.employee.first_name} {l.employee.last_name}" if l.employee else f"Emp {l.employee_id}"
             lines.append(
                 f"- Leave ID {l.id}: {emp_name}, {l.leave_type}, "
-                f"{l.start_date} to {l.end_date}, Reason: {l.reason}"
+                f"{l.from_date.strftime('%Y-%m-%d')} to {l.to_date.strftime('%Y-%m-%d')}, Reason: {l.reason}"
             )
         return "\n".join(lines)
 
     elif tool_name == "get_employee_list":
-        from app.db.models.employee import Employee
         from app.db.models.user import User
-        from app.db.models.role import Role
-        from app.db.models.department import Department
 
         query = (
-            select(Employee)
-            .options(
-                selectinload(Employee.department),
-                selectinload(Employee.user).selectinload(User.role),
-            )
+            select(User)
         )
         if tool_input.get("department_id"):
-            query = query.where(Employee.department_id == tool_input["department_id"])
+            query = query.where(User.department_id == str(tool_input["department_id"]))
+        if tool_input.get("role"):
+            query = query.where(User.role == tool_input["role"].upper())
 
         result = await db.execute(query)
         employees = result.scalars().all()
@@ -186,9 +177,7 @@ async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_us
             return "No employees found."
         lines = [f"Found {len(employees)} employee(s):"]
         for e in employees:
-            dept_name = e.department.name if e.department else "No Dept"
-            role_name = e.user.role.name.value if (e.user and e.user.role) else "Unknown"
-            lines.append(f"- ID {e.id}: {e.first_name} {e.last_name} | {role_name} | {dept_name}")
+            lines.append(f"- ID {e.id}: {e.first_name} {e.last_name} | {e.role} | Dept: {e.department_id or 'None'}")
         return "\n".join(lines)
 
     elif tool_name == "get_attendance_today":
@@ -263,30 +252,24 @@ async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_us
         return "\n".join(lines)
 
     elif tool_name == "get_employee_detail":
-        from app.db.models.employee import Employee
         from app.db.models.user import User
 
         result = await db.execute(
-            select(Employee)
-            .options(
-                selectinload(Employee.department),
-                selectinload(Employee.user).selectinload(User.role),
-            )
-            .where(Employee.id == tool_input["employee_id"])
+            select(User)
+            .where(User.id == str(tool_input["employee_id"]))
+            .limit(1)
         )
         emp = result.scalar_one_or_none()
         if not emp:
             return f"No employee found with ID {tool_input['employee_id']}"
-        dept = emp.department.name if emp.department else "Not assigned"
-        role = emp.user.role.name.value if (emp.user and emp.user.role) else "Unknown"
-        email = emp.user.email if emp.user else "N/A"
+            
         return (
             f"Employee: {emp.first_name} {emp.last_name}\n"
             f"- ID: {emp.id} | Code: {emp.employee_id}\n"
-            f"- Role: {role}\n"
-            f"- Department: {dept}\n"
-            f"- Joined: {emp.date_of_joining}\n"
-            f"- Email: {email}"
+            f"- Role: {emp.role}\n"
+            f"- Department ID: {emp.department_id or 'Not assigned'}\n"
+            f"- Joined: {emp.join_date}\n"
+            f"- Email: {emp.email}"
         )
 
     elif tool_name == "approve_leave":
@@ -302,6 +285,11 @@ async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_us
     elif tool_name == "run_read_only_sql":
         from sqlalchemy import text
         sql = tool_input["sql_query"].strip()
+        
+        # Enforce strict limiting in SQL to prevent memory bloat
+        if "limit" not in sql.lower():
+            sql = sql.rstrip(";") + " LIMIT 50;"
+            
         if not sql.lower().startswith("select"):
             return "Error: Only SELECT queries are allowed for security reasons."
         if any(bad in sql.lower() for bad in ["drop", "delete", "update", "insert", "truncate", "alter", ";", "--"]):

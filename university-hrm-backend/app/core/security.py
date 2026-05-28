@@ -7,8 +7,8 @@ from passlib.context import CryptContext
 from app.core.config import settings
 
 
-# Argon2 — modern, secure, no version conflicts
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+# Bcrypt — existing DB uses bcrypt ($2b$)
+pwd_context = CryptContext(schemes=["bcrypt", "argon2"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

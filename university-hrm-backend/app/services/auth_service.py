@@ -1,86 +1,70 @@
-# from sqlalchemy import select
-# from sqlalchemy.ext.asyncio import AsyncSession
-# from app.db.models.user import User
-# from app.db.models.role import Role, RoleEnum
-# from app.core.security import get_password_hash, verify_password
-# from app.schemas.auth import UserCreate
-
-
-# async def register_user(db: AsyncSession, user_in: UserCreate) -> User:
-#     # Check if email exists
-#     result = await db.execute(select(User).where(User.email == user_in.email))
-#     if result.scalar_one_or_none():
-#         raise ValueError("Email already registered")
-
-#     # Get role
-#     result = await db.execute(select(Role).where(Role.name == RoleEnum(user_in.role_name)))
-#     role = result.scalar_one_or_none()
-#     if not role:
-#         raise ValueError(f"Role '{user_in.role_name}' not found")
-
-#     user = User(
-#         email=user_in.email,
-#         hashed_password=get_password_hash(user_in.password),
-#         role_id=role.id,
-#     )
-#     db.add(user)
-#     await db.commit()
-#     await db.refresh(user)
-#     return user
-
-
-# async def authenticate_user(db: AsyncSession, email: str, password: str) -> User | None:
-#     result = await db.execute(select(User).where(User.email == email))
-#     user = result.scalar_one_or_none()
-#     if not user or not verify_password(password, user.hashed_password):
-#         return None
-#     return user
+"""
+Auth service — updated to match actual DB schema.
+The `users` table has `role` as a VARCHAR enum column (not a FK to a roles table).
+Password field is `password_hash` (not `hashed_password`).
+"""
+import uuid
+from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+
 from app.db.models.user import User
-from app.db.models.role import Role, RoleEnum
 from app.core.security import get_password_hash, verify_password
 from app.schemas.auth import UserCreate
 
 
 async def register_user(db: AsyncSession, user_in: UserCreate) -> User:
+    """Create a new user. Role is stored directly in the users.role column."""
     # Check if email exists
     result = await db.execute(select(User).where(User.email == user_in.email))
     if result.scalar_one_or_none():
         raise ValueError("Email already registered")
 
-    # Get role
-    result = await db.execute(select(Role).where(Role.name == RoleEnum(user_in.role_name)))
-    role = result.scalar_one_or_none()
-    if not role:
-        raise ValueError(f"Role '{user_in.role_name}' not found")
+    now = datetime.now(timezone.utc)
+    # Generate a UUID for the new user
+    new_id = str(uuid.uuid4())
+    # Generate employee ID
+    emp_id = f"EMP{new_id[:8].upper()}"
 
     user = User(
+        id=new_id,
+        employee_id=emp_id,
+        first_name=user_in.first_name if hasattr(user_in, 'first_name') else "New",
+        last_name=user_in.last_name if hasattr(user_in, 'last_name') else "User",
         email=user_in.email,
-        hashed_password=get_password_hash(user_in.password),
-        role_id=role.id,
+        work_email=user_in.email,
+        password_hash=get_password_hash(user_in.password),
+        role=user_in.role_name or "employee",
+        status="active",
+        needs_password_change=False,
+        failed_login_attempts=0,
+        created_at=now,
+        updated_at=now,
     )
     db.add(user)
     await db.commit()
-
-    # db.refresh() only reloads columns, not relationships.
-    # Re-fetch the user with role eagerly loaded instead.
-    result = await db.execute(
-        select(User)
-        .options(selectinload(User.role))
-        .where(User.id == user.id)
-    )
-    return result.scalar_one()
+    await db.refresh(user)
+    return user
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> User | None:
-    result = await db.execute(
-        select(User)
-        .options(selectinload(User.role))
-        .where(User.email == email)
-    )
+    """Authenticate user by email and password."""
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(password, user.hashed_password):
+    if not user:
         return None
+    # Check if locked
+    if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+        return None
+    # Verify password against password_hash column
+    if not verify_password(password, user.password_hash):
+        # Increment failed attempts
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        await db.commit()
+        return None
+    # Reset failed attempts on success
+    user.failed_login_attempts = 0
+    user.last_login = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(user)
     return user

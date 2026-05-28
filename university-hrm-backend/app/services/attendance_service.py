@@ -1,15 +1,25 @@
+"""
+Attendance service — updated for actual DB schema.
+DB uses check_in / check_out (not clock_in / clock_out).
+PKs are VARCHAR UUID strings.
+LATE_THRESHOLD and SHIFT_END_TIME come from system_settings table,
+defaulting to 09:15 and 18:00 respectively.
+"""
+import uuid
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
+from typing import Optional
 
 from sqlalchemy import select, extract, func
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.attendance import Attendance, LATE_THRESHOLD, SHIFT_END_TIME
-from app.schemas.attendance import AttendanceSummary, AttendanceRead
+from app.db.models.attendance import Attendance
 
-# ── Timezone — change to your university's timezone ──────────────────────────
-TZ = ZoneInfo("Asia/Kolkata")   # IST — change if needed
+TZ = ZoneInfo("Asia/Kolkata")
+
+# Default thresholds — ideally from system_settings but used as fallback
+DEFAULT_LATE_THRESHOLD = time(9, 15)
+DEFAULT_SHIFT_END = time(18, 0)
 
 
 def _now() -> datetime:
@@ -20,37 +30,36 @@ def _today() -> date:
     return _now().date()
 
 
-def _calculate_hours(clock_in: datetime, clock_out: datetime) -> float:
-    delta = clock_out - clock_in
-    hours = delta.total_seconds() / 3600
-    return round(hours, 2)
+def _calculate_hours(check_in: datetime, check_out: datetime) -> float:
+    delta = check_out - check_in
+    return round(delta.total_seconds() / 3600, 2)
 
 
-# ── Clock In ──────────────────────────────────────────────────────────────────
-
-async def clock_in(db: AsyncSession, employee_id: int) -> Attendance:
+async def clock_in(db: AsyncSession, employee_id: str) -> Attendance:
+    """Record check-in for today. Raises if already checked in."""
     today = _today()
     now = _now()
 
-    # Check if already clocked in today
-    result = await db.execute(
+    existing = await db.execute(
         select(Attendance).where(
             Attendance.employee_id == employee_id,
             Attendance.date == today,
         )
     )
-    existing = result.scalar_one_or_none()
-    if existing:
-        raise ValueError("Already clocked in today. Only one clock-in per day allowed.")
+    if existing.scalar_one_or_none():
+        raise ValueError("Already checked in today")
 
-    is_late = now.time() > LATE_THRESHOLD
+    is_late = now.time() > DEFAULT_LATE_THRESHOLD
 
     record = Attendance(
+        id=str(uuid.uuid4()),
         employee_id=employee_id,
         date=today,
-        clock_in=now,
+        check_in=now,
         is_late=is_late,
         status="present",
+        created_at=now,
+        updated_at=now,
     )
     db.add(record)
     await db.commit()
@@ -58,9 +67,8 @@ async def clock_in(db: AsyncSession, employee_id: int) -> Attendance:
     return record
 
 
-# ── Clock Out ─────────────────────────────────────────────────────────────────
-
-async def clock_out(db: AsyncSession, employee_id: int) -> Attendance:
+async def clock_out(db: AsyncSession, employee_id: str) -> Attendance:
+    """Record check-out for today. Raises if not checked in or already checked out."""
     today = _today()
     now = _now()
 
@@ -73,69 +81,42 @@ async def clock_out(db: AsyncSession, employee_id: int) -> Attendance:
     record = result.scalar_one_or_none()
 
     if not record:
-        raise ValueError("You have not clocked in today.")
-    if record.clock_out is not None:
-        raise ValueError("Already clocked out today.")
+        raise ValueError("You have not checked in today")
+    if record.check_out is not None:
+        raise ValueError("Already checked out today")
 
-    record.clock_out = now
-    record.total_hours = _calculate_hours(record.clock_in, now)
+    record.check_out = now
+    record.total_hours = _calculate_hours(record.check_in, now)
+    record.updated_at = now
     await db.commit()
     await db.refresh(record)
     return record
 
 
-# ── Auto clock-out (called by HR or scheduled job) ───────────────────────────
-
 async def auto_clock_out_missing(db: AsyncSession) -> int:
-    """
-    Finds all records from today that have clock_in but no clock_out,
-    and sets clock_out = SHIFT_END_TIME, marks is_auto_clocked_out = True.
-    Returns count of records updated.
-    Call this endpoint at end of day (e.g. 7 PM via cron or HR manually).
-    """
+    """Auto check-out all employees still checked in at end of day."""
     today = _today()
-
-    # Build shift end datetime in correct timezone
-    shift_end = datetime.combine(today, SHIFT_END_TIME).replace(tzinfo=TZ)
+    shift_end = datetime.combine(today, DEFAULT_SHIFT_END).replace(tzinfo=TZ)
 
     result = await db.execute(
         select(Attendance).where(
             Attendance.date == today,
-            Attendance.clock_in.isnot(None),
-            Attendance.clock_out.is_(None),
+            Attendance.check_in.isnot(None),
+            Attendance.check_out.is_(None),
         )
     )
     records = result.scalars().all()
-
     count = 0
     for record in records:
-        record.clock_out = shift_end
-        record.total_hours = _calculate_hours(record.clock_in, shift_end)
-        record.is_auto_clocked_out = True
+        record.check_out = shift_end
+        record.total_hours = _calculate_hours(record.check_in, shift_end)
+        record.updated_at = _now()
         count += 1
-
     await db.commit()
     return count
 
-async def update_attendance_by_hr(db: AsyncSession, attendance_id: int, updates: dict) -> Attendance:
-    result = await db.execute(select(Attendance).where(Attendance.id == attendance_id))
-    att = result.scalar_one_or_none()
-    
-    if not att:
-        raise ValueError("Attendance record not found")
-        
-    for k, v in updates.items():
-        if v is not None:
-            # We must correctly cast timestamps or strings if sent by the UI
-            setattr(att, k, v)
-            
-    await db.commit()
-    return att
 
-
-# ── Today's status ────────────────────────────────────────────────────────────
-
-async def get_today_status(db: AsyncSession, employee_id: int) -> Attendance | None:
+async def get_today_status(db: AsyncSession, employee_id: str) -> Optional[Attendance]:
     result = await db.execute(
         select(Attendance).where(
             Attendance.employee_id == employee_id,
@@ -145,11 +126,9 @@ async def get_today_status(db: AsyncSession, employee_id: int) -> Attendance | N
     return result.scalar_one_or_none()
 
 
-# ── Own history ───────────────────────────────────────────────────────────────
-
 async def get_own_attendance(
     db: AsyncSession,
-    employee_id: int,
+    employee_id: str,
     month: int,
     year: int,
 ) -> list[Attendance]:
@@ -163,52 +142,25 @@ async def get_own_attendance(
     return result.scalars().all()
 
 
-# ── Monthly summary ───────────────────────────────────────────────────────────
-
-async def get_monthly_summary(
-    db: AsyncSession,
-    employee_id: int,
-    month: int,
-    year: int,
-) -> AttendanceSummary:
-    records = await get_own_attendance(db, employee_id, month, year)
-
-    total_present = sum(1 for r in records if r.status == "present")
-    total_late = sum(1 for r in records if r.is_late)
-    total_on_leave = sum(1 for r in records if r.status == "on_leave")
-    total_absent = sum(1 for r in records if r.status == "absent")
-    total_hours = sum(float(r.total_hours) for r in records if r.total_hours is not None)
-
-    return AttendanceSummary(
-        employee_id=employee_id,
-        month=month,
-        year=year,
-        total_days_present=total_present,
-        total_days_late=total_late,
-        total_days_absent=total_absent,
-        total_days_on_leave=total_on_leave,
-        total_hours_worked=round(total_hours, 2),
-        records=[AttendanceRead.model_validate(r) for r in records],
-    )
-
-
-# ── HR: view any employee's attendance ───────────────────────────────────────
-
-async def get_employee_attendance_for_hr(
-    db: AsyncSession,
-    employee_id: int,
-    month: int,
-    year: int,
-) -> list[Attendance]:
-    return await get_own_attendance(db, employee_id, month, year)
-
-
 async def get_all_attendance_today(db: AsyncSession) -> list[Attendance]:
-    """HR: see all clock-ins for today across all employees."""
+    """HR: all check-ins for today."""
     result = await db.execute(
         select(Attendance)
-        .options(selectinload(Attendance.employee))
         .where(Attendance.date == _today())
         .order_by(Attendance.employee_id)
     )
     return result.scalars().all()
+
+
+async def update_attendance_by_hr(db: AsyncSession, attendance_id: str, updates: dict) -> Attendance:
+    result = await db.execute(select(Attendance).where(Attendance.id == attendance_id))
+    att = result.scalar_one_or_none()
+    if not att:
+        raise ValueError("Attendance record not found")
+    for k, v in updates.items():
+        if hasattr(att, k) and v is not None:
+            setattr(att, k, v)
+    att.updated_at = _now()
+    await db.commit()
+    await db.refresh(att)
+    return att

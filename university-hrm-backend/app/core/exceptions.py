@@ -84,7 +84,8 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception):
-        # Log it but don't expose internals to client
+        import traceback
+        traceback.print_exc()
         print(f"[ERROR] Unhandled exception: {type(exc).__name__}: {exc}")
         return _error_response(
             code="INTERNAL_SERVER_ERROR",

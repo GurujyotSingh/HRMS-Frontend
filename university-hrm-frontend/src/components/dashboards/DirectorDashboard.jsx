@@ -22,7 +22,7 @@ export default function DirectorDashboard() {
   return (
     <div className="dashboard-view" style={{ animation: 'fadeIn 0.25s ease-out' }}>
       <h1 className="page-title" style={{ marginBottom: 6 }}>
-        Director Portal — {user?.firstName || user?.first_name || 'Director'}
+        Director Portal — {user?.first_name || user?.first_name || 'Director'}
       </h1>
       <p style={{ color: 'var(--gray-500)', marginBottom: 24 }}>
         Overview of your department's operational status.
@@ -91,10 +91,10 @@ export default function DirectorDashboard() {
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border-light, var(--border))' }}
               >
                 <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
-                  {member.firstName?.[0]}{member.lastName?.[0]}
+                  {member.first_name?.[0]}{member.last_name?.[0]}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{member.firstName} {member.lastName}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{member.first_name} {member.last_name}</div>
                   <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{member.designation || member.role}</div>
                 </div>
               </div>

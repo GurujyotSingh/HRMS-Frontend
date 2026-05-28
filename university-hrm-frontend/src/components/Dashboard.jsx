@@ -7,7 +7,7 @@ import EmployeeDashboard from './dashboards/EmployeeDashboard';
 
 /**
  * Role-based dashboard router.
- * Maps NestJS SystemRole → normalized internal role → dashboard component.
+ * Maps SystemRole → normalized internal role → dashboard component.
  *
  * DIRECTOR replaces all HOD/department_head references.
  * hr_staff uses HR dashboard. Accountant role is dropped (no matching backend role).

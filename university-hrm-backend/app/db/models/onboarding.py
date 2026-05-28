@@ -1,112 +1,86 @@
+"""
+Onboarding models — match actual `onboarding_employees` and `onboarding_tasks` tables.
+The actual DB table is `onboarding_employees` (not `onboarding_records`).
+Uses VARCHAR UUID PKs.
+"""
 from __future__ import annotations
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-if TYPE_CHECKING:
-    from app.db.models.employee import Employee
-    from app.db.models.user import User
 
-
-# ── Onboarding ────────────────────────────────────────────────────────────────
-
-class OnboardingTemplate(Base):
+class OnboardingEmployee(Base):
     """
-    Master list of default tasks every new employee must complete.
-    HR manages this list. When a new employee is created, these tasks
-    are auto-seeded into EmployeeOnboardingTask.
+    Tracks onboarding progress per employee.
+    One record per employee — created when HR adds a new employee.
     """
-    __tablename__ = "onboarding_templates"
+    __tablename__ = "onboarding_employees"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    employee_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, unique=True)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expected_completion_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # pending | in_progress | completed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-
-class OnboardingRecord(Base):
-    """
-    One record per employee. Tracks overall onboarding status.
-    Created automatically when employee is added.
-    """
-    __tablename__ = "onboarding_records"
-    __table_args__ = (
-        UniqueConstraint("employee_id", name="uq_onboarding_employee"),
+    employee: Mapped["User"] = relationship("User", foreign_keys=[employee_id])
+    tasks: Mapped[list["OnboardingTask"]] = relationship(
+        "OnboardingTask", back_populates="onboarding",
+        cascade="all, delete-orphan"
     )
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), default="in_progress", nullable=False)
-    # status: "in_progress" | "completed"
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    employee: Mapped[Employee] = relationship("Employee", back_populates="onboarding_record")
-    tasks: Mapped[list[OnboardingTask]] = relationship("OnboardingTask", back_populates="onboarding_record", cascade="all, delete-orphan")
 
 
 class OnboardingTask(Base):
-    """
-    Individual task per employee, seeded from OnboardingTemplate.
-    HR can also add custom tasks for a specific employee.
-    """
+    """Individual task item for employee onboarding."""
     __tablename__ = "onboarding_tasks"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    onboarding_record_id: Mapped[int] = mapped_column(ForeignKey("onboarding_records.id"), nullable=False)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    onboarding_record_id: Mapped[str] = mapped_column(String, ForeignKey("onboarding_employees.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    onboarding_record: Mapped[OnboardingRecord] = relationship("OnboardingRecord", back_populates="tasks")
+    onboarding: Mapped["OnboardingEmployee"] = relationship("OnboardingEmployee", back_populates="tasks")
 
-
-# ── Offboarding ───────────────────────────────────────────────────────────────
 
 class OffboardingRecord(Base):
-    """
-    HR initiates this when an employee is leaving.
-    One record per employee (can only be offboarded once).
-    """
+    """HR initiates when employee is leaving."""
     __tablename__ = "offboarding_records"
-    __table_args__ = (
-        UniqueConstraint("employee_id", name="uq_offboarding_employee"),
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    employee_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, unique=True)
+    initiated_by_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_working_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String, default="in_progress", nullable=False)
+    clearance_status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
+    initiated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    employee: Mapped["User"] = relationship("User", foreign_keys=[employee_id])
+    initiated_by: Mapped["User"] = relationship("User", foreign_keys=[initiated_by_id])
+    tasks: Mapped[list["OffboardingTask"]] = relationship(
+        "OffboardingTask", back_populates="offboarding_record",
+        cascade="all, delete-orphan"
     )
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), nullable=False)
-    initiated_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)  # HR user
-    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_working_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    status: Mapped[str] = mapped_column(String(20), default="in_progress", nullable=False)
-    # status: "in_progress" | "completed" | "cancelled"
-
-    clearance_status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
-    # clearance_status: "pending" | "cleared" | "hold"
-
-    initiated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    employee: Mapped[Employee] = relationship("Employee", back_populates="offboarding_record")
-    initiated_by: Mapped[User] = relationship("User", foreign_keys=[initiated_by_id])
-    tasks: Mapped[list[OffboardingTask]] = relationship("OffboardingTask", back_populates="offboarding_record", cascade="all, delete-orphan")
 
 
 class OffboardingTask(Base):
-    """Individual checklist item for an employee's offboarding."""
+    """Individual checklist item for employee offboarding."""
     __tablename__ = "offboarding_tasks"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    offboarding_record_id: Mapped[int] = mapped_column(ForeignKey("offboarding_records.id"), nullable=False)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    offboarding_record_id: Mapped[str] = mapped_column(String, ForeignKey("offboarding_records.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    offboarding_record: Mapped[OffboardingRecord] = relationship("OffboardingRecord", back_populates="tasks")
+    offboarding_record: Mapped["OffboardingRecord"] = relationship("OffboardingRecord", back_populates="tasks")

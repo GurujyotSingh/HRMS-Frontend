@@ -50,7 +50,7 @@ export default function AdminDashboard() {
   return (
     <div className="dashboard" style={{ animation: 'fadeIn 0.25s ease-out' }}>
       <h1 className="page-title" style={{ marginBottom: 4 }}>
-        Welcome back, {user?.firstName || user?.first_name || user?.email?.split('@')[0] || 'Admin'} 👋
+        Welcome back, {user?.first_name || user?.first_name || user?.email?.split('@')[0] || 'Admin'} 👋
       </h1>
       <p style={{ color: 'var(--gray-500)', marginBottom: 28, fontSize: 14 }}>
         Here's what's happening in your university today.
@@ -118,14 +118,14 @@ export default function AdminDashboard() {
               {recentHires.map((emp) => (
                 <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
-                    {emp.firstName?.[0]}{emp.lastName?.[0]}
+                    {emp.first_name?.[0]}{emp.last_name?.[0]}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{emp.firstName} {emp.lastName}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{emp.first_name} {emp.last_name}</div>
                     <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{emp.department?.name || '—'}</div>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--gray-500)' }}>
-                    {emp.joinDate ? new Date(emp.joinDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                    {emp.join_date ? new Date(emp.join_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
                   </div>
                 </div>
               ))}

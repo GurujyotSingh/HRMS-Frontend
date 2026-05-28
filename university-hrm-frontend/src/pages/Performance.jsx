@@ -31,7 +31,7 @@ export default function Performance() {
   const [showCreateCycle, setShowCreateCycle] = useState(false);
   const [cycleForm, setCycleForm] = useState({ name: '', year: new Date().getFullYear(), startDate: '', endDate: '' });
   const [showAssignGoal, setShowAssignGoal] = useState(false);
-  const [assignForm, setAssignForm] = useState({ employeeId: '', cycleId: '', title: '', description: '' });
+  const [assignForm, setAssignForm] = useState({ employee_id: '', cycleId: '', title: '', description: '' });
   const [teamMembers, setTeamMembers] = useState([]);
 
   const [goalForm, setGoalForm] = useState({ cycleId: '', title: '', description: '' });
@@ -128,14 +128,14 @@ export default function Performance() {
     setSubmitting(true);
     try {
       await perfAPI.assignGoal({
-        employeeId: parseInt(assignForm.employeeId),
+        employee_id: parseInt(assignForm.employee_id),
         cycleId: parseInt(assignForm.cycleId),
         title: assignForm.title,
         description: assignForm.description,
       });
       toast('Goal assigned successfully!', 'success');
       setShowAssignGoal(false);
-      setAssignForm({ employeeId: '', cycleId: '', title: '', description: '' });
+      setAssignForm({ employee_id: '', cycleId: '', title: '', description: '' });
       loadData();
     } catch (e) {
       toast(e.response?.data?.message || 'Failed to assign goal', 'error');
@@ -296,7 +296,7 @@ export default function Performance() {
   ];
 
   const directorCols = [
-    { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}` },
+    { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
     { key: 'title', label: 'Goal', render: (r) => (
       <span style={{ maxWidth: 250 }} className="truncate">{r.title || '—'}</span>
     )},
@@ -313,7 +313,7 @@ export default function Performance() {
   ];
 
   const allCols = [
-    { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}` },
+    { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
     { key: 'title', label: 'Goal', render: (r) => (
       <span style={{ maxWidth: 200 }} className="truncate">{r.title || '—'}</span>
     )},
@@ -490,10 +490,10 @@ export default function Performance() {
       {/* Assign Goal Modal */}
       <Modal open={showAssignGoal} onClose={() => setShowAssignGoal(false)} title="Assign Goal to Team" width={480}>
         <form onSubmit={handleAssignGoal}>
-          <Select label="Employee" value={assignForm.employeeId} onChange={(e) => setAssignForm({ ...assignForm, employeeId: e.target.value })} required id="assign-emp">
+          <Select label="Employee" value={assignForm.employee_id} onChange={(e) => setAssignForm({ ...assignForm, employee_id: e.target.value })} required id="assign-emp">
             <option value="">Select Employee</option>
             {teamMembers.map(emp => (
-              <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+              <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
             ))}
           </Select>
           <Select label="Appraisal Cycle" value={assignForm.cycleId} onChange={(e) => setAssignForm({ ...assignForm, cycleId: e.target.value })} required id="assign-cycle">

@@ -12,16 +12,18 @@ from app.schemas.performance import (
     PerformanceGoalRead, GoalAssignHOD
 )
 from app.services import performance_service
-from app.services.employee_service import get_employee_by_user_id
 
 router = APIRouter(prefix="/performance", tags=["Performance"])
 
 
-async def _resolve_employee(db, user_id):
-    emp = await get_employee_by_user_id(db, user_id)
-    if not emp:
-        raise HTTPException(status_code=404, detail="Employee profile not found")
-    return emp
+# No separate employee table — user.id IS the employee_id
+async def _resolve_employee(db, user_id: str):
+    from sqlalchemy import select
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return user
 
 
 # ── Appraisal Cycles (HR) ─────────────────────────────────────────────────────
@@ -53,7 +55,7 @@ async def get_active_cycle(
 
 @router.post("/cycles/{cycle_id}/close", response_model=AppraisalCycleRead, summary="HR: close a cycle")
 async def close_cycle(
-    cycle_id: int,
+    goal_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
@@ -80,7 +82,7 @@ async def create_goal(
 
 @router.post("/goals/{goal_id}/submit", response_model=PerformanceGoalRead, summary="Employee: submit goals for HOD review")
 async def submit_goal(
-    goal_id: int,
+    goal_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -93,7 +95,7 @@ async def submit_goal(
 
 @router.post("/goals/{goal_id}/self-review", response_model=PerformanceGoalRead, summary="Employee: submit self-rating")
 async def self_review(
-    goal_id: int,
+    goal_id: str,
     data: GoalSelfReview,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -154,7 +156,7 @@ async def hod_pending_goals(
 
 @router.post("/goals/{goal_id}/hod-review", response_model=PerformanceGoalRead, summary="HOD: rate and review a goal")
 async def hod_review(
-    goal_id: int,
+    goal_id: str,
     data: GoalHODReview,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.DEPARTMENT_HEAD)),
@@ -172,7 +174,7 @@ async def hod_review(
 
 @router.get("/goals/hr/all", response_model=list[PerformanceGoalRead], summary="HR: view all goals (filter by cycle)")
 async def hr_all_goals(
-    cycle_id: Optional[int] = Query(None),
+    cycle_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
@@ -181,7 +183,7 @@ async def hr_all_goals(
 
 @router.post("/goals/{goal_id}/finalize", response_model=PerformanceGoalRead, summary="HR: set final rating")
 async def hr_finalize(
-    goal_id: int,
+    goal_id: str,
     data: GoalHRFinalize,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),

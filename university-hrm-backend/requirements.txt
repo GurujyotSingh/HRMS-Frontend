@@ -10,4 +10,4 @@ python-jose[cryptography]
 passlib[argon2]
 httpx
 slowapi
-tzdata
+bcrypt==4.1.2

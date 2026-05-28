@@ -3,26 +3,14 @@
 import asyncio
 from logging.config import fileConfig
 
-from app.db.models import (
-    leave,
-    leave_balance,
-    leave_policy,
-    attendance,
-    onboarding,
-    payroll,
-    performance,
-    chat,
-)
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy.engine import Connection
 from app.db.models import (
     user,
-    employee,
     department,
     role,
-    leave,
-    leave_balance,
+    leave_request,
     leave_policy,
     attendance,
     onboarding,
@@ -40,7 +28,7 @@ fileConfig(config.config_file_name)
 
 # Import your models' Base + all models so auto-detect works
 from app.db.base import Base
-from app.db.models import user, employee, department, role  # adjust imports
+from app.db.models import user, department, role  # adjust imports
 
 target_metadata = Base.metadata
 

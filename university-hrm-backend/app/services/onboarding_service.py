@@ -1,245 +1,179 @@
-from datetime import datetime, timezone
+"""
+Onboarding service — updated for actual DB schema.
+- Table is `onboarding_employees` (not `onboarding_records`)
+- Table is `onboarding_tasks` (with onboarding_record_id FK to onboarding_employees)
+- No OnboardingTemplate table in actual DB
+- PKs are VARCHAR UUID strings
+"""
+import uuid
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.onboarding import (
-    OnboardingTemplate, OnboardingRecord, OnboardingTask,
+    OnboardingEmployee, OnboardingTask,
     OffboardingRecord, OffboardingTask,
 )
-from app.schemas.onboarding import (
-    OnboardingTemplateCreate, OnboardingTaskCreate,
-    OffboardingInitiate, OffboardingTaskCreate, ClearanceUpdate,
-)
-from app.db.models.employee import Employee
+from app.db.models.user import User
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Onboarding ────────────────────────────────────────────────────────────────
 
-async def _fetch_onboarding(db: AsyncSession, record_id: int) -> OnboardingRecord:
+async def get_onboarding_by_employee(
+    db: AsyncSession, employee_id: str
+) -> Optional[OnboardingEmployee]:
     result = await db.execute(
-        select(OnboardingRecord)
-        .options(selectinload(OnboardingRecord.tasks))
-        .where(OnboardingRecord.id == record_id)
+        select(OnboardingEmployee)
+        .options(selectinload(OnboardingEmployee.tasks))
+        .where(OnboardingEmployee.employee_id == employee_id)
     )
-    return result.scalar_one()
+    return result.scalar_one_or_none()
 
 
-async def _fetch_offboarding(db: AsyncSession, record_id: int) -> OffboardingRecord:
+async def get_all_onboarding_records(db: AsyncSession) -> list[OnboardingEmployee]:
     result = await db.execute(
-        select(OffboardingRecord)
-        .options(selectinload(OffboardingRecord.tasks))
-        .where(OffboardingRecord.id == record_id)
-    )
-    return result.scalar_one()
-
-
-def _notify_completion(employee_id: int, record_type: str) -> None:
-    """
-    Notification stub — replace with real email later.
-    e.g. send_email(employee.email, f"{record_type} completed")
-    """
-    print(f"[NOTIFY] Employee {employee_id}: {record_type} all tasks completed ✓")
-
-
-# ── Onboarding Templates (HR manages) ────────────────────────────────────────
-
-async def get_all_templates(db: AsyncSession) -> list[OnboardingTemplate]:
-    result = await db.execute(
-        select(OnboardingTemplate).where(OnboardingTemplate.is_active == True)
+        select(OnboardingEmployee)
+        .options(selectinload(OnboardingEmployee.tasks))
+        .order_by(OnboardingEmployee.start_date.desc())
     )
     return result.scalars().all()
 
 
-async def create_template(db: AsyncSession, data: OnboardingTemplateCreate) -> OnboardingTemplate:
-    template = OnboardingTemplate(title=data.title, description=data.description)
-    db.add(template)
-    await db.commit()
-    await db.refresh(template)
-    return template
-
-
-async def delete_template(db: AsyncSession, template_id: int) -> None:
-    result = await db.execute(select(OnboardingTemplate).where(OnboardingTemplate.id == template_id))
-    template = result.scalar_one_or_none()
-    if not template:
-        raise ValueError("Template not found")
-    template.is_active = False   # soft delete
-    await db.commit()
-
-
-# ── Onboarding: auto-seed when employee is created ───────────────────────────
-
-async def seed_onboarding_for_employee(db: AsyncSession, employee_id: int) -> OnboardingRecord:
-    """
-    Called automatically when a new employee is created.
-    Creates OnboardingRecord + one OnboardingTask per active template.
-    """
-    # Check if already exists
-    result = await db.execute(
-        select(OnboardingRecord).where(OnboardingRecord.employee_id == employee_id)
-    )
-    if result.scalar_one_or_none():
-        raise ValueError("Onboarding already exists for this employee")
-
-    record = OnboardingRecord(
+async def create_onboarding_for_employee(
+    db: AsyncSession,
+    employee_id: str,
+    task_titles: Optional[list] = None,
+) -> OnboardingEmployee:
+    now = _utcnow()
+    record = OnboardingEmployee(
+        id=str(uuid.uuid4()),
         employee_id=employee_id,
+        start_date=now,
+        expected_completion_date=now + timedelta(days=30),
         status="in_progress",
-        started_at=_utcnow(),
+        created_at=now,
+        updated_at=now,
     )
     db.add(record)
-    await db.flush()   # get record.id before adding tasks
+    await db.flush()
 
-    # Seed tasks from active templates
-    templates_result = await db.execute(
-        select(OnboardingTemplate).where(OnboardingTemplate.is_active == True)
-    )
-    templates = templates_result.scalars().all()
-
-    for t in templates:
+    # Add default tasks
+    default_tasks = task_titles or [
+        "Submit joining documents",
+        "Set up workstation",
+        "Complete IT system access setup",
+        "Meet with HR for orientation",
+        "Review HR policies and handbook",
+        "Complete mandatory training modules",
+    ]
+    for title in default_tasks:
         task = OnboardingTask(
+            id=str(uuid.uuid4()),
             onboarding_record_id=record.id,
-            title=t.title,
-            description=t.description,
+            title=title,
         )
         db.add(task)
 
     await db.commit()
-    return await _fetch_onboarding(db, record.id)
+    return await get_onboarding_by_employee(db, employee_id)
 
 
-# ── Onboarding: employee completes tasks ─────────────────────────────────────
+async def add_onboarding_task(
+    db: AsyncSession, onboarding_id: str, title: str, description: Optional[str] = None
+) -> OnboardingTask:
+    task = OnboardingTask(
+        id=str(uuid.uuid4()),
+        onboarding_record_id=onboarding_id,
+        title=title,
+        description=description,
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
 
 async def complete_onboarding_task(
-    db: AsyncSession, task_id: int, employee_id: int
-) -> OnboardingRecord:
-    """Employee marks a task as complete. Auto-completes the record if all tasks done."""
-    # Verify task belongs to this employee
-    result = await db.execute(
-        select(OnboardingTask)
-        .join(OnboardingRecord)
-        .where(
-            OnboardingTask.id == task_id,
-            OnboardingRecord.employee_id == employee_id,
-        )
-    )
+    db: AsyncSession, task_id: str, employee_id: Optional[str] = None
+) -> OnboardingTask:
+    result = await db.execute(select(OnboardingTask).where(OnboardingTask.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
-        raise ValueError("Task not found or does not belong to you")
-    if task.is_completed:
-        raise ValueError("Task already completed")
-
+        raise ValueError("Task not found")
     task.is_completed = True
     task.completed_at = _utcnow()
     await db.commit()
 
-    # Check if all tasks are now done → mark record complete + notify
-    record = await _fetch_onboarding(db, task.onboarding_record_id)
-    if all(t.is_completed for t in record.tasks):
+    # Check if all tasks done → auto-complete record
+    record_result = await db.execute(
+        select(OnboardingEmployee)
+        .options(selectinload(OnboardingEmployee.tasks))
+        .where(OnboardingEmployee.id == task.onboarding_record_id)
+    )
+    record = record_result.scalar_one_or_none()
+    if record and all(t.is_completed for t in record.tasks):
         record.status = "completed"
         record.completed_at = _utcnow()
+        record.updated_at = _utcnow()
         await db.commit()
-        _notify_completion(employee_id, "Onboarding")
-        return await _fetch_onboarding(db, record.id)
 
-    return record
-
-
-async def get_my_onboarding(db: AsyncSession, employee_id: int) -> OnboardingRecord | None:
-    result = await db.execute(
-        select(OnboardingRecord)
-        .options(selectinload(OnboardingRecord.tasks))
-        .where(OnboardingRecord.employee_id == employee_id)
-    )
-    return result.scalar_one_or_none()
+    await db.refresh(task)
+    return task
 
 
-# ── Onboarding: HR monitoring ─────────────────────────────────────────────────
+# ── Offboarding ───────────────────────────────────────────────────────────────
 
-async def get_all_onboarding_records(db: AsyncSession) -> list[OnboardingRecord]:
-    result = await db.execute(
-        select(OnboardingRecord)
-        .options(selectinload(OnboardingRecord.tasks))
-        .order_by(OnboardingRecord.started_at.desc())
-    )
-    return result.scalars().all()
-
-
-async def get_onboarding_by_employee(db: AsyncSession, employee_id: int) -> OnboardingRecord | None:
-    result = await db.execute(
-        select(OnboardingRecord)
-        .options(selectinload(OnboardingRecord.tasks))
-        .where(OnboardingRecord.employee_id == employee_id)
-    )
-    return result.scalar_one_or_none()
-
-
-async def hr_add_custom_onboarding_task(
-    db: AsyncSession, employee_id: int, data: OnboardingTaskCreate
-) -> OnboardingRecord:
-    """HR adds a custom task to a specific employee's onboarding."""
-    record = await get_onboarding_by_employee(db, employee_id)
-    if not record:
-        raise ValueError("No onboarding record found for this employee")
-
-    task = OnboardingTask(
-        onboarding_record_id=record.id,
-        title=data.title,
-        description=data.description,
-    )
-    db.add(task)
-    await db.commit()
-    return await _fetch_onboarding(db, record.id)
-
-
-# ── Offboarding: HR initiates ─────────────────────────────────────────────────
-
-# Default offboarding checklist for everyone
 DEFAULT_OFFBOARDING_TASKS = [
-    ("Return ID card",            "Employee must return their university ID card"),
+    ("Return ID card",            "Return university ID card to HR"),
     ("Return laptop / equipment", "Return all university-owned devices"),
     ("Clear dues / library",      "Clear any pending dues or library books"),
-    ("Handover pending work",     "Document and handover all pending tasks to team"),
+    ("Handover pending work",     "Document and handover all pending tasks"),
     ("Exit interview",            "Complete exit interview with HR"),
-    ("Final settlement",          "HR processes final salary and settlements"),
+    ("Final settlement",          "HR processes final salary settlement"),
     ("Deactivate accounts",       "IT deactivates email and system access"),
 ]
 
 
 async def initiate_offboarding(
-    db: AsyncSession, data: OffboardingInitiate, hr_user_id: int
+    db: AsyncSession, employee_id: str, initiated_by_id: str,
+    reason: Optional[str] = None, last_working_date: Optional[datetime] = None,
 ) -> OffboardingRecord:
-    # Check if employee exists
-    emp_result = await db.execute(select(Employee).where(Employee.id == data.employee_id))
+    # Check employee exists
+    emp_result = await db.execute(select(User).where(User.id == employee_id))
     if not emp_result.scalar_one_or_none():
-        raise ValueError(f"Employee with ID {data.employee_id} does not exist.")
+        raise ValueError(f"Employee {employee_id} does not exist")
 
     # Check if already offboarding
-    result = await db.execute(
-        select(OffboardingRecord).where(OffboardingRecord.employee_id == data.employee_id)
+    existing = await db.execute(
+        select(OffboardingRecord).where(OffboardingRecord.employee_id == employee_id)
     )
-    if result.scalar_one_or_none():
+    if existing.scalar_one_or_none():
         raise ValueError("Offboarding already initiated for this employee")
 
+    now = _utcnow()
     record = OffboardingRecord(
-        employee_id=data.employee_id,
-        initiated_by_id=hr_user_id,
-        reason=data.reason,
-        last_working_date=data.last_working_date,
+        id=str(uuid.uuid4()),
+        employee_id=employee_id,
+        initiated_by_id=initiated_by_id,
+        reason=reason,
+        last_working_date=last_working_date,
         status="in_progress",
         clearance_status="pending",
-        initiated_at=_utcnow(),
+        initiated_at=now,
     )
     db.add(record)
     await db.flush()
 
-    # Seed default tasks
     for title, desc in DEFAULT_OFFBOARDING_TASKS:
         task = OffboardingTask(
+            id=str(uuid.uuid4()),
             offboarding_record_id=record.id,
             title=title,
             description=desc,
@@ -247,78 +181,13 @@ async def initiate_offboarding(
         db.add(task)
 
     await db.commit()
-    return await _fetch_offboarding(db, record.id)
-
-
-async def hr_add_offboarding_task(
-    db: AsyncSession, employee_id: int, data: OffboardingTaskCreate
-) -> OffboardingRecord:
-    result = await db.execute(
-        select(OffboardingRecord).where(OffboardingRecord.employee_id == employee_id)
-    )
-    record = result.scalar_one_or_none()
-    if not record:
-        raise ValueError("No offboarding record found for this employee")
-
-    task = OffboardingTask(
-        offboarding_record_id=record.id,
-        title=data.title,
-        description=data.description,
-    )
-    db.add(task)
-    await db.commit()
-    return await _fetch_offboarding(db, record.id)
-
-
-async def complete_offboarding_task(
-    db: AsyncSession, task_id: int, offboarding_record_id: int
-) -> OffboardingRecord:
-    """HR marks an offboarding task as complete."""
-    result = await db.execute(
-        select(OffboardingTask).where(
-            OffboardingTask.id == task_id,
-            OffboardingTask.offboarding_record_id == offboarding_record_id,
-        )
-    )
-    task = result.scalar_one_or_none()
-    if not task:
-        raise ValueError("Task not found")
-    if task.is_completed:
-        raise ValueError("Task already completed")
-
-    task.is_completed = True
-    task.completed_at = _utcnow()
-    await db.commit()
-
-    record = await _fetch_offboarding(db, offboarding_record_id)
-
-    # Auto-complete record if all tasks done
-    if all(t.is_completed for t in record.tasks):
-        record.status = "completed"
-        record.completed_at = _utcnow()
-        await db.commit()
-        _notify_completion(record.employee_id, "Offboarding")
-        return await _fetch_offboarding(db, record.id)
-
-    return record
-
-
-async def update_clearance_status(
-    db: AsyncSession, employee_id: int, data: ClearanceUpdate
-) -> OffboardingRecord:
-    if data.clearance_status not in ("pending", "cleared", "hold"):
-        raise ValueError("clearance_status must be 'pending', 'cleared', or 'hold'")
 
     result = await db.execute(
-        select(OffboardingRecord).where(OffboardingRecord.employee_id == employee_id)
+        select(OffboardingRecord)
+        .options(selectinload(OffboardingRecord.tasks))
+        .where(OffboardingRecord.id == record.id)
     )
-    record = result.scalar_one_or_none()
-    if not record:
-        raise ValueError("No offboarding record found")
-
-    record.clearance_status = data.clearance_status
-    await db.commit()
-    return await _fetch_offboarding(db, record.id)
+    return result.scalar_one()
 
 
 async def get_all_offboarding_records(db: AsyncSession) -> list[OffboardingRecord]:
@@ -330,10 +199,57 @@ async def get_all_offboarding_records(db: AsyncSession) -> list[OffboardingRecor
     return result.scalars().all()
 
 
-async def get_offboarding_by_employee(db: AsyncSession, employee_id: int) -> OffboardingRecord | None:
+async def get_offboarding_by_employee(
+    db: AsyncSession, employee_id: str
+) -> Optional[OffboardingRecord]:
     result = await db.execute(
         select(OffboardingRecord)
         .options(selectinload(OffboardingRecord.tasks))
         .where(OffboardingRecord.employee_id == employee_id)
     )
     return result.scalar_one_or_none()
+
+
+async def complete_offboarding_task(
+    db: AsyncSession, task_id: str, offboarding_record_id: str
+) -> OffboardingRecord:
+    result = await db.execute(
+        select(OffboardingTask).where(
+            OffboardingTask.id == task_id,
+            OffboardingTask.offboarding_record_id == offboarding_record_id,
+        )
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise ValueError("Task not found")
+    task.is_completed = True
+    task.completed_at = _utcnow()
+    await db.commit()
+
+    record_result = await db.execute(
+        select(OffboardingRecord)
+        .options(selectinload(OffboardingRecord.tasks))
+        .where(OffboardingRecord.id == offboarding_record_id)
+    )
+    record = record_result.scalar_one()
+
+    if all(t.is_completed for t in record.tasks):
+        record.status = "completed"
+        record.completed_at = _utcnow()
+        await db.commit()
+
+    return record
+
+
+async def update_clearance_status(
+    db: AsyncSession, employee_id: str, clearance_status: str
+) -> OffboardingRecord:
+    result = await db.execute(
+        select(OffboardingRecord).where(OffboardingRecord.employee_id == employee_id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise ValueError("No offboarding record found")
+    record.clearance_status = clearance_status
+    await db.commit()
+    return await get_offboarding_by_employee(db, employee_id)

@@ -28,9 +28,9 @@ export default function Payroll() {
   const [aiLoading, setAiLoading]   = useState(false);
   const [aiText, setAiText]         = useState('');
 
-  const [genForm, setGenForm] = useState({ employeeId: '', month: '', year: new Date().getFullYear() });
+  const [genForm, setGenForm] = useState({ employee_id: '', month: '', year: new Date().getFullYear() });
   const [structForm, setStructForm] = useState({
-    employeeId: '', basicSalary: '', hra: '', ta: '', da: '',
+    employee_id: '', basicSalary: '', hra: '', ta: '', da: '',
     otherAllowances: '', pfDeduction: '', professionalTax: '', tdsRate: '',
     workingDaysPerMonth: 26,
   });
@@ -75,13 +75,13 @@ export default function Payroll() {
     setGenerating(true);
     try {
       await payrollAPI.generate({
-        employeeId: genForm.employeeId,
+        employee_id: genForm.employee_id,
         month: Number(genForm.month),
         year: Number(genForm.year),
       });
       toast('Payslip generated successfully', 'success');
       setShowGenerate(false);
-      setGenForm({ employeeId: '', month: '', year: new Date().getFullYear() });
+      setGenForm({ employee_id: '', month: '', year: new Date().getFullYear() });
       loadData();
     } catch (e) {
       toast(e.response?.data?.message || 'Failed to generate payslip', 'error');
@@ -94,7 +94,7 @@ export default function Payroll() {
     e.preventDefault();
     setGenerating(true);
     try {
-      await salaryStructureAPI.set(structForm.employeeId, {
+      await salaryStructureAPI.set(structForm.employee_id, {
         basicSalary:        parseFloat(structForm.basicSalary) || 0,
         hra:                parseFloat(structForm.hra) || 0,
         ta:                 parseFloat(structForm.ta) || 0,
@@ -130,7 +130,7 @@ export default function Payroll() {
       const { data } = await salaryStructureAPI.get(empId);
       if (data) {
         setStructForm({
-          employeeId: empId,
+          employee_id: empId,
           basicSalary: data.basicSalary ?? '',
           hra: data.hra ?? '',
           ta: data.ta ?? '',
@@ -192,8 +192,8 @@ export default function Payroll() {
   ];
 
   const allCols = [
-    { key: 'empId',   label: 'Emp ID', render: (r) => r.employee?.employeeId || '—' },
-    { key: 'empName', label: 'Name',   render: (r) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}` },
+    { key: 'empId',   label: 'Emp ID', render: (r) => r.employee?.employee_id || '—' },
+    { key: 'empName', label: 'Name',   render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
     { key: 'dept',    label: 'Dept',   render: (r) => r.employee?.department?.name || '—' },
     periodCol,
     { key: 'grossSalary', label: 'Gross',   render: (r) => fmt(r.grossSalary) },
@@ -245,14 +245,14 @@ export default function Payroll() {
         <form onSubmit={handleGenerate}>
           <Select
             label="Employee"
-            value={genForm.employeeId}
-            onChange={(e) => setGenForm({ ...genForm, employeeId: e.target.value })}
+            value={genForm.employee_id}
+            onChange={(e) => setGenForm({ ...genForm, employee_id: e.target.value })}
             required id="gen-emp"
           >
             <option value="">-- Select Employee --</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.firstName} {e.lastName} ({e.employeeId})
+                {e.first_name} {e.last_name} ({e.employee_id})
               </option>
             ))}
           </Select>
@@ -276,13 +276,13 @@ export default function Payroll() {
         <form onSubmit={handleSetStructure}>
           <Select
             label="Employee"
-            value={structForm.employeeId}
-            onChange={(e) => { setStructForm({ ...structForm, employeeId: e.target.value }); handleLoadStructure(e.target.value); }}
+            value={structForm.employee_id}
+            onChange={(e) => { setStructForm({ ...structForm, employee_id: e.target.value }); handleLoadStructure(e.target.value); }}
             required id="struct-emp"
           >
             <option value="">-- Select Employee --</option>
             {employees.map((e) => (
-              <option key={e.id} value={e.id}>{e.firstName} {e.lastName} ({e.employeeId})</option>
+              <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.employee_id})</option>
             ))}
           </Select>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
@@ -314,7 +314,7 @@ export default function Payroll() {
               </h3>
               {showDetail.employee && (
                 <div style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 6 }}>
-                  {showDetail.employee.firstName} {showDetail.employee.lastName} · {showDetail.employee.department?.name || ''}
+                  {showDetail.employee.first_name} {showDetail.employee.last_name} · {showDetail.employee.department?.name || ''}
                 </div>
               )}
               <Badge variant={showDetail.status === 'PUBLISHED' ? 'success' : 'warning'}>{showDetail.status}</Badge>

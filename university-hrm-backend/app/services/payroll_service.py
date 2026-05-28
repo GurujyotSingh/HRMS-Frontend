@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.payroll import SalaryStructure, Payslip
 from app.db.models.attendance import Attendance
-from app.db.models.leave import Leave
+from app.db.models.leave_request import LeaveRequest
 from app.db.models.enums import LeaveStatus
 from app.schemas.payroll import SalaryStructureCreate, PayslipGenerate, PayslipSummary, PayslipRead
 
@@ -72,11 +72,11 @@ async def _get_attendance_stats(
 
     # Count approved leaves in this month
     leave_result = await db.execute(
-        select(Leave).where(
-            Leave.employee_id == employee_id,
-            Leave.status == LeaveStatus.APPROVED,
-            extract("month", Leave.start_date) == month,
-            extract("year", Leave.start_date) == year,
+        select(LeaveRequest).where(
+            LeaveRequest.employee_id == str(employee_id),
+            LeaveRequest.status == "approved",
+            extract("month", LeaveRequest.start_date) == month,
+            extract("year", LeaveRequest.start_date) == year,
         )
     )
     approved_leaves = leave_result.scalars().all()

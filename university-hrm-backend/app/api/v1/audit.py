@@ -14,12 +14,12 @@ router = APIRouter(prefix="/audit", tags=["Audit Logs"])
 
 
 class AuditLogRead(BaseModel):
-    id: int
-    user_id: Optional[int] = None
+    id: Optional[str] = None
+    user_id: Optional[str] = None
     user_email: Optional[str] = None
     action: str
     resource: Optional[str] = None
-    resource_id: Optional[int] = None
+    resource_id: Optional[str] = None
     detail: Optional[str] = None
     ip_address: Optional[str] = None
     status: str
@@ -28,24 +28,35 @@ class AuditLogRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+async def _fetch_logs(
+    user_id: Optional[str],
+    action: Optional[str],
+    resource: Optional[str],
+    limit: int,
+    offset: int,
+    db: AsyncSession,
+    current_user: User,
+):
+    return await get_audit_logs(db, user_id, action, resource, limit, offset)
+
+
+@router.get(
+    "/",
+    response_model=list[AuditLogRead],
+    summary="HR/Admin: view audit logs (alias for /logs)",
+)
 @router.get(
     "/logs",
     response_model=list[AuditLogRead],
     summary="HR/Admin: view audit logs",
-    description=(
-        "View all critical system actions. Filter by user, action, or resource.\n\n"
-        "Actions: LOGIN, LOGOUT, LOGIN_FAILED, EMPLOYEE_CREATE, EMPLOYEE_UPDATE, "
-        "EMPLOYEE_DELETE, LEAVE_APPLY, LEAVE_APPROVE, LEAVE_REJECT, "
-        "PAYROLL_GENERATE, PAYROLL_FINALIZE, ROLE_CHANGE"
-    ),
 )
 async def get_logs(
-    user_id: Optional[int] = Query(None, description="Filter by user ID"),
-    action: Optional[str] = Query(None, description="Filter by action e.g. LOGIN"),
-    resource: Optional[str] = Query(None, description="Filter by resource e.g. leave"),
+    user_id: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    resource: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
 ):
     return await get_audit_logs(db, user_id, action, resource, limit, offset)

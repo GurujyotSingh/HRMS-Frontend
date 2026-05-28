@@ -6,7 +6,7 @@ import {
 } from '../components/ui';
 import { Plus, X, Check, Edit2, CalendarDays } from 'lucide-react';
 
-// NestJS uses UPPERCASE enum values
+
 const STATUS_BADGE = {
   PENDING:   { variant: 'warning', label: 'Pending' },
   APPROVED:  { variant: 'success', label: 'Approved' },
@@ -227,7 +227,7 @@ export default function Leaves() {
   ];
 
   const manageCols = [
-    { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}` },
+    { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
     typeCol,
     { key: 'fromDate', label: 'From', render: (r) => fmtDate(r.fromDate) },
     { key: 'toDate',   label: 'To',   render: (r) => fmtDate(r.toDate) },
@@ -308,7 +308,7 @@ export default function Leaves() {
         <Modal open={!!editLeave} onClose={() => setEditLeave(null)} title="Leave Details (HR View)">
           <form onSubmit={handleEditSubmit}>
             <div style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 16, lineHeight: 1.6 }}>
-              <strong>Employee:</strong> {editLeave.employee?.firstName} {editLeave.employee?.lastName}<br />
+              <strong>Employee:</strong> {editLeave.employee?.first_name} {editLeave.employee?.last_name}<br />
               <strong>Type:</strong> {editLeave.leaveType}<br />
               <strong>Period:</strong> {fmtDate(editLeave.fromDate)} → {fmtDate(editLeave.toDate)} ({editLeave.totalDays} days)<br />
               <strong>Reason:</strong> {editLeave.reason}

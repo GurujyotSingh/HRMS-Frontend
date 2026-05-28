@@ -1,224 +1,262 @@
-from fastapi import APIRouter, Depends, HTTPException
+"""
+Leaves API — updated to use the actual `leave_requests` table.
+DB columns: from_date / to_date (not start_date / end_date), total_days,
+reviewed_by_id, remarks, applied_at, updated_at.
+"""
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_role
-from app.db.models.role import RoleEnum
+from app.db.session import get_db
+from app.db.models.leave_request import LeaveRequest
 from app.db.models.user import User
-from app.db.session import get_db
-from app.db.session import get_db
-from app.schemas.leave import LeaveCreate, LeaveApproveHR, LeaveRead, LeaveUpdateHR
-from app.services import leave_service
-from app.services.employee_service import get_employee_by_user_id
+from app.db.models.role import RoleEnum
 
 router = APIRouter(prefix="/leaves", tags=["Leaves"])
 
 
-# ── Shared helper ─────────────────────────────────────────────────────────────
+# ── Pydantic Schemas ──────────────────────────────────────────────────────────
 
-async def _resolve_employee(db: AsyncSession, user_id: int):
-    employee = await get_employee_by_user_id(db, user_id)
-    if not employee:
-        raise HTTPException(status_code=404, detail="Employee profile not found for this user")
-    return employee
-
-
-def _is_hod(user: User) -> bool:
-    return user.role.name == RoleEnum.DEPARTMENT_HEAD
+class LeaveApply(BaseModel):
+    leave_type: str               # casual | sick | earned | unpaid
+    from_date: datetime
+    to_date: datetime
+    total_days: int
+    reason: str
+    attachment_url: Optional[str] = None
 
 
-# ── Employee routes ───────────────────────────────────────────────────────────
-
-@router.post(
-    "/apply",
-    response_model=LeaveRead,
-    summary="Apply for leave",
-    description="Any employee (including HOD) can apply. HOD's own leaves skip HOD approval and go straight to HR.",
-)
-async def apply_leave(
-    leave_in: LeaveCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    employee = await _resolve_employee(db, current_user.id)
-    try:
-        return await leave_service.apply_leave(db, employee, leave_in)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+class LeaveProcess(BaseModel):
+    action: str                   # approve | reject
+    remarks: Optional[str] = None
 
 
-@router.get(
-    "/my",
-    response_model=list[LeaveRead],
-    summary="View my leave history",
-)
+class LeaveOut(BaseModel):
+    id: str
+    employee_id: str
+    leave_type: Optional[str] = None
+    from_date: datetime
+    to_date: datetime
+    total_days: int
+    reason: str
+    attachment_url: Optional[str] = None
+    status: Optional[str] = None
+    reviewed_by_id: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    remarks: Optional[str] = None
+    applied_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Helper ────────────────────────────────────────────────────────────────────
+
+async def _get_leave_or_404(db: AsyncSession, leave_id: str) -> LeaveRequest:
+    result = await db.execute(select(LeaveRequest).where(LeaveRequest.id == leave_id))
+    leave = result.scalar_one_or_none()
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    return leave
+
+
+# ── Employee Endpoints ────────────────────────────────────────────────────────
+
+@router.get("/my", response_model=list[LeaveOut])
 async def get_my_leaves(
-    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    employee = await _resolve_employee(db, current_user.id)
-    return await leave_service.get_own_leaves(db, employee.id)
+    """View current user's own leave history."""
+    result = await db.execute(
+        select(LeaveRequest)
+        .where(LeaveRequest.employee_id == current_user.id)
+        .order_by(LeaveRequest.applied_at.desc())
+        .offset(skip).limit(limit)
+    )
+    return result.scalars().all()
 
 
-@router.post(
-    "/my/{leave_id}/cancel",
-    response_model=LeaveRead,
-    summary="Cancel a pending leave request",
-)
+@router.post("/apply", response_model=LeaveOut)
+async def apply_leave(
+    data: LeaveApply,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply for leave."""
+    now = datetime.now(timezone.utc)
+    leave = LeaveRequest(
+        id=str(uuid.uuid4()),
+        employee_id=current_user.id,
+        leave_type=data.leave_type,
+        from_date=data.from_date,
+        to_date=data.to_date,
+        total_days=data.total_days,
+        reason=data.reason,
+        attachment_url=data.attachment_url,
+        status="pending",
+        applied_at=now,
+        updated_at=now,
+    )
+    db.add(leave)
+    await db.commit()
+    await db.refresh(leave)
+    return leave
+
+
+@router.post("/my/{leave_id}/cancel", response_model=LeaveOut)
 async def cancel_my_leave(
-    leave_id: int,
-    db: AsyncSession = Depends(get_db),
+    leave_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    employee = await _resolve_employee(db, current_user.id)
-    try:
-        return await leave_service.cancel_leave(db, leave_id, employee.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    """Cancel a pending leave request."""
+    leave = await _get_leave_or_404(db, leave_id)
+    if leave.employee_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your leave request")
+    if leave.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending leaves can be cancelled")
+    leave.status = "cancelled"
+    leave.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(leave)
+    return leave
 
 
-# ── HOD routes ────────────────────────────────────────────────────────────────
+# ── HOD Endpoints ─────────────────────────────────────────────────────────────
 
-@router.get(
-    "/hod/pending",
-    response_model=list[LeaveRead],
-    summary="HOD: view pending leaves in department (excludes own)",
-)
+@router.get("/hod/pending", response_model=list[LeaveOut])
 async def hod_pending_leaves(
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.DEPARTMENT_HEAD)),
+    db: AsyncSession = Depends(get_db),
 ):
-    employee = await _resolve_employee(db, current_user.id)
-    if not employee.department_id:
-        raise HTTPException(status_code=400, detail="You have no department assigned")
-    return await leave_service.get_pending_leaves_for_hod(db, employee.department_id, employee.id)
+    """HOD: view pending leaves in their department."""
+    result = await db.execute(
+        select(LeaveRequest)
+        .join(User, User.id == LeaveRequest.employee_id)
+        .where(
+            User.department_id == current_user.department_id,
+            LeaveRequest.status == "pending",
+            LeaveRequest.employee_id != current_user.id,
+        )
+        .order_by(LeaveRequest.applied_at)
+    )
+    return result.scalars().all()
 
 
-@router.post(
-    "/hod/{leave_id}/approve",
-    response_model=LeaveRead,
-    summary="HOD: approve a department employee's leave",
-)
+@router.post("/hod/{leave_id}/approve", response_model=LeaveOut)
 async def hod_approve(
-    leave_id: int,
-    db: AsyncSession = Depends(get_db),
+    leave_id: str,
     current_user: User = Depends(require_role(RoleEnum.DEPARTMENT_HEAD)),
+    db: AsyncSession = Depends(get_db),
 ):
-    employee = await _resolve_employee(db, current_user.id)
-    if not employee.department_id:
-        raise HTTPException(status_code=400, detail="You have no department assigned")
-    try:
-        return await leave_service.approve_by_hod(db, leave_id, current_user.id, employee.department_id, employee.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    """HOD: approve a leave."""
+    leave = await _get_leave_or_404(db, leave_id)
+    leave.status = "approved"
+    leave.reviewed_by_id = current_user.id
+    leave.reviewed_at = datetime.now(timezone.utc)
+    leave.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(leave)
+    return leave
 
 
-@router.post(
-    "/hod/{leave_id}/reject",
-    response_model=LeaveRead,
-    summary="HOD: reject a department employee's leave",
-)
+@router.post("/hod/{leave_id}/reject", response_model=LeaveOut)
 async def hod_reject(
-    leave_id: int,
-    db: AsyncSession = Depends(get_db),
+    leave_id: str,
     current_user: User = Depends(require_role(RoleEnum.DEPARTMENT_HEAD)),
+    db: AsyncSession = Depends(get_db),
 ):
-    employee = await _resolve_employee(db, current_user.id)
-    if not employee.department_id:
-        raise HTTPException(status_code=400, detail="You have no department assigned")
-    try:
-        return await leave_service.reject_by_hod(db, leave_id, current_user.id, employee.department_id, employee.id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    """HOD: reject a leave."""
+    leave = await _get_leave_or_404(db, leave_id)
+    leave.status = "rejected"
+    leave.reviewed_by_id = current_user.id
+    leave.reviewed_at = datetime.now(timezone.utc)
+    leave.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(leave)
+    return leave
 
 
-# ── HR routes ─────────────────────────────────────────────────────────────────
+# ── HR Endpoints ──────────────────────────────────────────────────────────────
 
-@router.get(
-    "/hr/all",
-    response_model=list[LeaveRead],
-    summary="HR: view all leave requests across all departments",
-)
+@router.get("/hr/all", response_model=list[LeaveOut])
 async def hr_all_leaves(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    status: Optional[str] = Query(None),
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
-    return await leave_service.get_all_leaves_for_hr(db)
+    """HR/Admin: view all leave requests."""
+    stmt = (
+        select(LeaveRequest)
+        .order_by(LeaveRequest.applied_at.desc())
+        .offset(skip).limit(limit)
+    )
+    if status:
+        stmt = stmt.where(LeaveRequest.status == status)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-@router.get(
-    "/hr/queue",
-    response_model=list[LeaveRead],
-    summary="HR: view action queue (HOD-approved + HOD's own pending)",
-)
-async def hr_action_queue(
+@router.get("/hr/queue", response_model=list[LeaveOut])
+async def hr_queue(
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
-    return await leave_service.get_hr_action_queue(db)
+    """HR: view leaves awaiting HR action (pending or hod_approved)."""
+    result = await db.execute(
+        select(LeaveRequest)
+        .where(LeaveRequest.status.in_(["pending", "approved"]))
+        .order_by(LeaveRequest.applied_at)
+    )
+    return result.scalars().all()
 
 
-@router.post(
-    "/hr/{leave_id}/process",
-    response_model=LeaveRead,
-    summary='HR: final approve or reject — body: {"action": "approve" | "reject"}',
-    description=(
-        "**approve**: leave must be APPROVED_BY_HOD (or PENDING if applicant is a HOD). "
-        "Balance is deducted automatically on approval.\n\n"
-        "**reject**: works at PENDING or APPROVED_BY_HOD stage."
-    ),
-)
+@router.post("/hr/{leave_id}/process", response_model=LeaveOut)
 async def hr_process_leave(
-    leave_id: int,
-    body: LeaveApproveHR,
+    leave_id: str,
+    body: LeaveProcess,
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
-    try:
-        return await leave_service.process_by_hr(db, leave_id, current_user.id, body.action)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    """HR/Admin: approve or reject a leave."""
+    if body.action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+    leave = await _get_leave_or_404(db, leave_id)
+    leave.status = "approved" if body.action == "approve" else "rejected"
+    leave.reviewed_by_id = current_user.id
+    leave.reviewed_at = datetime.now(timezone.utc)
+    leave.updated_at = datetime.now(timezone.utc)
+    if body.remarks:
+        leave.remarks = body.remarks
+    await db.commit()
+    await db.refresh(leave)
+    return leave
 
-@router.patch(
-    "/hr/{leave_id}",
-    response_model=LeaveRead,
-    summary="HR: edit a pending or approved leave record",
-)
+
+@router.patch("/hr/{leave_id}", response_model=LeaveOut)
 async def hr_update_leave(
-    leave_id: int,
-    body: LeaveUpdateHR,
+    leave_id: str,
+    body: dict,
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
-    try:
-        updates = body.model_dump(exclude_unset=True)
-        return await leave_service.update_leave_by_hr(db, leave_id, current_user.id, updates)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get(
-    "/admin/queue",
-    response_model=list[LeaveRead],
-    summary="Admin: view pending leaves from HR users",
-)
-async def admin_hr_queue(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.ADMIN)),
-):
-    return await leave_service.get_pending_leaves_for_admin(db)
-
-
-@router.post(
-    "/admin/{leave_id}/process",
-    response_model=LeaveRead,
-    summary="Admin: approve or reject HR leave",
-)
-async def admin_process_leave(
-    leave_id: int,
-    body: LeaveApproveHR,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.ADMIN)),
-):
-    try:
-        return await leave_service.process_by_admin(db, leave_id, current_user.id, body.action)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    """HR/Admin: edit a leave record."""
+    leave = await _get_leave_or_404(db, leave_id)
+    for field, value in body.items():
+        if hasattr(leave, field):
+            setattr(leave, field, value)
+    leave.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(leave)
+    return leave

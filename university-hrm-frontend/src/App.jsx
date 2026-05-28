@@ -17,6 +17,8 @@ import Performance from './pages/Performance';
 import Chat from './pages/Chat';
 import AuditLogs from './pages/AuditLogs';
 import Reports from './pages/Reports';
+import Recruitment from './pages/Recruitment';
+import Announcements from './pages/Announcements';
 
 // Redirect if already logged in
 function LoginRoute({ children }) {
@@ -69,6 +71,14 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/recruitment"
+          element={
+            <ProtectedRoute roles={MANAGE_ROLES}>
+              <AppLayout><Recruitment /></AppLayout>
+            </ProtectedRoute>
+          }
+        />
 
         {/* ── Leave (all) ─────────────────────────────────────── */}
         <Route
@@ -106,6 +116,16 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AppLayout><Onboarding /></AppLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ── Announcements ───────────────────────────────────── */}
+        <Route
+          path="/announcements"
+          element={
+            <ProtectedRoute>
+              <AppLayout><Announcements /></AppLayout>
             </ProtectedRoute>
           }
         />

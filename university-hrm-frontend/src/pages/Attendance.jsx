@@ -152,8 +152,8 @@ export default function Attendance() {
   ];
 
   const hrCols = [
-    { key: 'employeeId', label: 'Emp ID', render: (r) => r.employee?.employeeId || '—' },
-    { key: 'employeeName', label: 'Name', render: (r) => `${r.employee?.firstName || ''} ${r.employee?.lastName || ''}` },
+    { key: 'employee_id', label: 'Emp ID', render: (r) => r.employee?.employee_id || '—' },
+    { key: 'employeeName', label: 'Name', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
     { key: 'clockIn', label: 'Clock In', render: (r) => formatTime(r.clockIn) },
     { key: 'clockOut', label: 'Clock Out', render: (r) => formatTime(r.clockOut) },
     { key: 'totalHours', label: 'Hours', render: (r) => {
