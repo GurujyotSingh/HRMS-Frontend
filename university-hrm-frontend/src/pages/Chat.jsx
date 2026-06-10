@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { chatAPI } from '../services/api';
-import { Card, Btn, Spinner, toast } from '../components/ui';
+import { Card, Btn, Spinner, toast, Skeleton } from '../components/ui';
 import { Send, Plus, Trash2, MessageSquare, Bot, User } from 'lucide-react';
 
 const SUGGESTIONS = [
@@ -234,8 +234,19 @@ export default function Chat() {
         {/* Messages */}
         <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Spinner size={28} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Skeleton width="36px" height="36px" variant="circular" />
+                <Skeleton width="60%" height="60px" style={{ borderRadius: '20px 20px 20px 4px' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                <Skeleton width="40%" height="45px" style={{ borderRadius: '20px 20px 4px 20px' }} />
+                <Skeleton width="36px" height="36px" variant="circular" />
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Skeleton width="36px" height="36px" variant="circular" />
+                <Skeleton width="70%" height="80px" style={{ borderRadius: '20px 20px 20px 4px' }} />
+              </div>
             </div>
           ) : messages.length === 0 ? (
             /* Empty state with suggestions */

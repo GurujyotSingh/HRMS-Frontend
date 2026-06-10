@@ -1,217 +1,192 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.api.deps import get_current_user, require_role
 from app.db.models.role import RoleEnum
 from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.payroll import (
-    SalaryStructureCreate, SalaryStructureRead,
-    PayslipGenerate, PayslipRead, PayslipSummary,
+    PayrollRunCreate, PayrollRunUpdate, PayrollRunRead, PayrollRunPaginatedOut, PayrollActionRequest, PayslipRead
 )
 from app.services import payroll_service
 
 router = APIRouter(prefix="/payroll", tags=["Payroll"])
 
 
-# No separate employee table — user.id IS the employee_id
-async def _resolve_employee(db, user_id):
-    from sqlalchemy import select
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    return user
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SALARY STRUCTURE — HR only
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@router.post(
-    "/salary-structure/{employee_id}",
-    response_model=SalaryStructureRead,
-    summary="HR: set or update salary structure for an employee",
-    description=(
-        "Creates salary structure if none exists, otherwise updates it. "
-        "Must be set before generating a payslip."
-    ),
-)
-async def set_salary_structure(
-    employee_id: str,
-    data: SalaryStructureCreate,
+@router.post("", response_model=PayrollRunRead)
+async def create_payroll(
+    request: Request,
+    data: PayrollRunCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
+    current_user: User = Depends(require_role(RoleEnum.HR, "hr_manager", "hr_staff", RoleEnum.ADMIN)),
 ):
     try:
-        return await payroll_service.set_salary_structure(db, employee_id, data)
+        return await payroll_service.create_payroll(db, data, current_user, request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get(
-    "/salary-structure/{employee_id}",
-    response_model=SalaryStructureRead,
-    summary="HR: view an employee's salary structure",
-)
-async def get_salary_structure(
-    employee_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
-):
-    structure = await payroll_service.get_salary_structure(db, employee_id)
-    if not structure:
-        raise HTTPException(status_code=404, detail="No salary structure found")
-    return structure
-
-
-@router.get(
-    "/my/salary-structure",
-    response_model=SalaryStructureRead,
-    summary="Employee: view own salary structure",
-)
-async def my_salary_structure(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    employee = await _resolve_employee(db, current_user.id)
-    structure = await payroll_service.get_salary_structure(db, employee.id)
-    if not structure:
-        raise HTTPException(status_code=404, detail="Salary structure not set yet")
-    return structure
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PAYSLIPS — HR
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@router.post(
-    "/payslips/generate",
-    response_model=PayslipRead,
-    summary="HR: generate a payslip for an employee",
-    description=(
-        "Auto-calculates from attendance + salary structure. "
-        "Saved as **draft** — employee cannot see it until HR finalizes. "
-        "Absent days cause per-day deduction. Approved leave days are paid."
-    ),
-)
-async def generate_payslip(
-    data: PayslipGenerate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
-):
-    try:
-        return await payroll_service.generate_payslip(db, data)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post(
-    "/payslips/{payslip_id}/finalize",
-    response_model=PayslipRead,
-    summary="HR: finalize a draft payslip (employee can view after this)",
-)
-async def finalize_payslip(
-    payslip_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
-):
-    try:
-        return await payroll_service.finalize_payslip(db, payslip_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post(
-    "/payslips/{payslip_id}/regenerate",
-    response_model=PayslipRead,
-    summary="HR: recalculate a draft payslip (use if attendance was updated)",
-)
-async def regenerate_payslip(
-    payslip_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
-):
-    try:
-        return await payroll_service.regenerate_payslip(db, payslip_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get(
-    "/hr/payslips",
-    response_model=list[PayslipRead],
-    summary="HR: view all payslips (filter by month/year)",
-)
-async def hr_all_payslips(
+@router.get("", response_model=PayrollRunPaginatedOut)
+async def list_payrolls(
+    employee_id: Optional[str] = Query(None),
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None, ge=2020),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
-):
-    return await payroll_service.get_all_payslips_for_hr(db, month, year)
-
-
-@router.get(
-    "/hr/summary",
-    response_model=PayslipSummary,
-    summary="HR: payroll summary for a month — total gross, deductions, net pay",
-)
-async def hr_monthly_summary(
-    month: int = Query(..., ge=1, le=12),
-    year: int = Query(..., ge=2020),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
-):
-    return await payroll_service.get_monthly_summary(db, month, year)
-
-
-@router.get(
-    "/hr/employee/{employee_id}/payslips",
-    response_model=list[PayslipRead],
-    summary="HR: view all payslips for a specific employee",
-)
-async def hr_employee_payslips(
-    employee_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
-):
-    return await payroll_service.get_all_payslips_for_hr(db, employee_id=employee_id)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PAYSLIPS — Employee (finalized only)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@router.get(
-    "/my/payslips",
-    response_model=list[PayslipRead],
-    summary="Employee: view own finalized payslips",
-)
-async def my_payslips(
+    status: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    employee = await _resolve_employee(db, current_user.id)
-    return await payroll_service.get_employee_payslips(db, employee.id)
+    # Enforce access
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "hr_manager", "hr_staff", "admin", "super_admin", "finance"]
+    if not is_privileged:
+        employee_id = current_user.id
+        
+    items, total = await payroll_service.list_payrolls(db, skip, limit, employee_id, month, year, status)
+    return {"items": items, "total": total}
 
 
-@router.get(
-    "/my/payslips/{month}/{year}",
-    response_model=PayslipRead,
-    summary="Employee: view payslip for a specific month",
-)
-async def my_payslip_by_month(
-    month: int,
-    year: int,
+@router.get("/employee/{emp_id}", response_model=PayrollRunPaginatedOut)
+async def list_employee_payrolls(
+    emp_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    employee = await _resolve_employee(db, current_user.id)
-    payslip = await payroll_service.get_payslip_by_month(db, employee.id, month, year)
+    if emp_id == "me":
+        emp_id = current_user.id
+
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "hr_manager", "hr_staff", "admin", "super_admin", "finance"]
+    if not is_privileged and current_user.id != emp_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    items, total = await payroll_service.list_payrolls(db, skip, limit, emp_id)
+    return {"items": items, "total": total}
+
+
+@router.get("/{id}", response_model=PayrollRunRead)
+async def get_payroll(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    run = await payroll_service.get_payroll(db, id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Payroll not found")
+        
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "finance"]
+    if not is_privileged and run.employee_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    return run
+
+
+@router.put("/{id}", response_model=PayrollRunRead)
+async def update_payroll(
+    request: Request,
+    id: str,
+    data: PayrollRunUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR, "hr_manager", "hr_staff", RoleEnum.ADMIN)),
+):
+    run = await payroll_service.update_payroll(db, id, data, current_user, request)
+    if not run:
+        raise HTTPException(status_code=404, detail="Payroll not found")
+    return run
+
+
+@router.post("/{id}/submit", response_model=PayrollRunRead)
+async def submit_payroll(
+    request: Request,
+    id: str,
+    data: PayrollActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR, "hr_manager", "hr_staff", RoleEnum.ADMIN)),
+):
+    try:
+        return await payroll_service.submit_payroll(db, id, data.remarks, current_user, request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{id}/approve", response_model=PayrollRunRead)
+async def approve_payroll(
+    request: Request,
+    id: str,
+    data: PayrollActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR, "hr_manager", "hr_staff", RoleEnum.ADMIN, RoleEnum.DEPARTMENT_HEAD, RoleEnum.ACCOUNTANT, "finance")),
+):
+    try:
+        return await payroll_service.approve_payroll(db, id, data.remarks, current_user, request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{id}/reject", response_model=PayrollRunRead)
+async def reject_payroll(
+    request: Request,
+    id: str,
+    data: PayrollActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR, "hr_manager", "hr_staff", RoleEnum.ADMIN, RoleEnum.DEPARTMENT_HEAD, RoleEnum.ACCOUNTANT, "finance")),
+):
+    return await payroll_service.reject_payroll(db, id, data.remarks, current_user, request)
+
+
+@router.post("/{id}/mark-paid", response_model=PayrollRunRead)
+async def mark_paid_payroll(
+    request: Request,
+    id: str,
+    data: PayrollActionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.ACCOUNTANT, "finance", RoleEnum.ADMIN)),
+):
+    try:
+        return await payroll_service.mark_paid(db, id, data.remarks, current_user, request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{id}/generate-payslip", response_model=PayslipRead)
+async def generate_payslip(
+    request: Request,
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.HR, "hr_manager", "hr_staff", RoleEnum.ADMIN)),
+):
+    run = await payroll_service.get_payroll(db, id)
+    if not run or run.status != "Paid":
+        raise HTTPException(status_code=400, detail="Cannot generate payslip unless Paid")
+    return await payroll_service.generate_payslip(db, id, current_user, request)
+
+
+@router.get("/{id}/download-payslip")
+async def download_payslip(
+    request: Request,
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.db.models.payroll import Payslip
+    result = await db.execute(select(Payslip).where(Payslip.payroll_run_id == id))
+    payslip = result.scalar_one_or_none()
     if not payslip:
         raise HTTPException(status_code=404, detail="Payslip not found")
-    if payslip.status != "finalized":
-        raise HTTPException(status_code=403, detail="Payslip not yet finalized by HR")
-    return payslip
+        
+    run = await payroll_service.get_payroll(db, id)
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "finance"]
+    if not is_privileged and run.employee_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    payslip.downloaded_count += 1
+    db.add(payslip)
+    
+    from app.services.audit_service import audit
+    await audit(db, "PAYSLIP_DOWNLOADED", user_id=current_user.id, user_email=current_user.email, resource="payslip", resource_id=payslip.id, detail="Payslip Downloaded", request=request)
+    await db.commit()
+    
+    return {"url": payslip.pdf_path, "message": "Payslip ready for download"}

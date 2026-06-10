@@ -33,25 +33,25 @@ async def get_dashboard(
 
     # Total active employees
     emp_count = await db.scalar(
-        select(func.count(User.id)).where(User.status == "active")
+        select(func.count(User.id)).where(User.status == "ACTIVE")  # enum fix
     ) or 0
 
     # Pending leave requests
     pending_leaves = await db.scalar(
-        select(func.count(LeaveRequest.id)).where(LeaveRequest.status == "pending")
+        select(func.count(LeaveRequest.id)).where(LeaveRequest.status == "PENDING")  # enum fix
     ) or 0
 
     # Today's attendance count
     today_present = await db.scalar(
         select(func.count(Attendance.id)).where(
-            and_(Attendance.date == today, Attendance.status == "present")
+            and_(Attendance.date == today, Attendance.status == "PRESENT")  # enum fix
         )
     ) or 0
 
     # Onboarding in progress
     onboarding_in_progress = await db.scalar(
         select(func.count(OnboardingEmployee.id)).where(
-            OnboardingEmployee.status == "in_progress"
+            OnboardingEmployee.status == "IN_PROGRESS"  # enum fix
         )
     ) or 0
 
@@ -61,14 +61,14 @@ async def get_dashboard(
             and_(
                 Payslip.month == today.month,
                 Payslip.year == today.year,
-                Payslip.status == "draft",
+                Payslip.status == "DRAFT",  # enum fix
             )
         )
     ) or 0
 
     # Active appraisal cycle
     active_cycle = await db.scalar(
-        select(AppraisalCycle).where(AppraisalCycle.status == "active").limit(1)
+        select(AppraisalCycle).where(AppraisalCycle.status == "ACTIVE").limit(1)  # enum fix
     )
 
     # Pending performance reviews
@@ -77,7 +77,7 @@ async def get_dashboard(
         pending_reviews = await db.scalar(
             select(func.count(PerformanceGoal.id)).where(
                 PerformanceGoal.cycle_id == active_cycle.id,
-                PerformanceGoal.status == "submitted",
+                PerformanceGoal.status == "SUBMITTED",  # enum fix
             )
         ) or 0
 
@@ -125,7 +125,7 @@ async def get_employee_dashboard(
     my_pending = await db.scalar(
         select(func.count(LeaveRequest.id)).where(
             LeaveRequest.employee_id == current_user.id,
-            LeaveRequest.status == "pending",
+            LeaveRequest.status == "PENDING",  # enum fix
         )
     ) or 0
 

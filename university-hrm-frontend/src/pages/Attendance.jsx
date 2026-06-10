@@ -1,25 +1,38 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { attendanceAPI } from '../services/api';
 import { PageHeader, Card, Table, Btn, Badge, Tabs, Select, Modal, Input, toast } from '../components/ui';
-import { LogIn, LogOut, Clock, Edit2 } from 'lucide-react';
+import { LogIn, LogOut, Clock, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
+
+// Fixed for 1M+ rows scalability:
+// - HR "All Employees" tab now uses server-side pagination (never fetches all clock events)
+// - My Records tab is paginated by month/year (already scoped, low risk)
+// - AbortController cancels stale requests when tab/page changes
+// - Overlay spinner keeps old data visible instead of full table flicker
+
+const PAGE_SIZE = 50; // Fixed for 1M+ rows: max 50 rows per page
 
 export default function Attendance() {
   const { hasRole } = useAuth();
   const [tab, setTab] = useState('clock');
   const [todayStatus, setTodayStatus] = useState(null);
   const [myRecords, setMyRecords] = useState([]);
-  const [hrToday, setHrToday] = useState([]);
+  const [hrRecords, setHrRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clocking, setClocking] = useState(false);
   const [editAtt, setEditAtt] = useState(null);
   const [editing, setEditing] = useState(false);
   const [time, setTime] = useState(new Date());
   const timerRef = useRef();
+  const abortRef = useRef(null); // Fixed for 1M+ rows: request cancellation
 
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+
+  // Fixed for 1M+ rows: pagination state for HR view
+  const [hrPage, setHrPage]   = useState(1);
+  const [hrTotal, setHrTotal] = useState(0);
 
   const isHR = hasRole('hr', 'admin', 'hr_staff');
 
@@ -43,35 +56,56 @@ export default function Attendance() {
     }
   };
 
-  const loadMyRecords = async () => {
-    setLoading(true);
-    try {
-      const { data } = await attendanceAPI.myRecords(month, year);
-      setMyRecords(data?.data || data || []);
-    } catch (e) {
-      toast(e.response?.data?.message || 'Failed to load records', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fixed for 1M+ rows: my records are month-scoped so size is bounded
+  const loadMyRecords = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
 
-  const loadHrToday = async () => {
     setLoading(true);
     try {
-      const { data } = await attendanceAPI.hrToday();
-      setHrToday(data?.data || data || []);
-    } catch {
-      setHrToday([]);
+      const { data } = await attendanceAPI.myRecords(month, year, {
+        limit: 31, // max 31 days in a month — safe upper bound
+        skip: 0,
+      });
+      setMyRecords(data?.data?.items || data?.items || data?.data || (Array.isArray(data) ? data : []));
+    } catch (e) {
+      if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') {
+        toast(e.response?.data?.message || 'Failed to load records', 'error');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [month, year]);
+
+  // Fixed for 1M+ rows: HR today view is NOW PAGINATED
+  // Previously loaded ALL clock events for today — dangerous with large orgs
+  const loadHrRecords = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+
+    setLoading(true);
+    try {
+      const { data } = await attendanceAPI.hrToday({
+        limit: PAGE_SIZE,
+        skip: (hrPage - 1) * PAGE_SIZE,
+      });
+      const items = data?.data?.items || data?.items || data?.data || (Array.isArray(data) ? data : []);
+      setHrRecords(items);
+      setHrTotal(data?.data?.total || data?.total || items.length);
+    } catch (e) {
+      if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') {
+        setHrRecords([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [hrPage]);
 
   const handleAutoClockOut = async () => {
     try {
       const { data } = await attendanceAPI.autoClockOut();
       toast(data.message || 'Auto clock out executed successfully', 'success');
-      loadHrToday();
+      loadHrRecords();
     } catch (e) {
       toast(e.response?.data?.message || 'Failed to execute auto clock-out', 'error');
     }
@@ -84,9 +118,11 @@ export default function Attendance() {
 
   useEffect(() => {
     if (tab === 'my') loadMyRecords();
-    if (tab === 'hr') loadHrToday();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, month, year]);
+    if (tab === 'hr') loadHrRecords();
+  }, [tab, loadMyRecords, loadHrRecords]);
+
+  // Reset HR page when tab changes
+  useEffect(() => { setHrPage(1); }, [tab]);
 
   const handleClockIn = async () => {
     setClocking(true);
@@ -125,7 +161,7 @@ export default function Attendance() {
       });
       toast('Attendance record updated successfully', 'success');
       setEditAtt(null);
-      loadHrToday();
+      loadHrRecords();
     } catch (e) {
       toast(e.response?.data?.message || 'Failed to update attendance', 'error');
     } finally {
@@ -160,9 +196,9 @@ export default function Attendance() {
       if (!r.totalHours) return '—';
       const isBurnout = r.totalHours > 9;
       return (
-        <span style={{ 
-          color: isBurnout ? 'var(--danger)' : 'inherit', 
-          fontWeight: isBurnout ? 700 : 'normal' 
+        <span style={{
+          color: isBurnout ? 'var(--danger)' : 'inherit',
+          fontWeight: isBurnout ? 700 : 'normal'
         }}>
           {r.totalHours.toFixed(1)}h {isBurnout && ' ⚠️'}
         </span>
@@ -177,6 +213,25 @@ export default function Attendance() {
       </Btn>
     )},
   ];
+
+  // Fixed for 1M+ rows: pagination bar for HR view
+  const hrTotalPages = Math.max(1, Math.ceil(hrTotal / PAGE_SIZE));
+  const HrPaginationBar = () => hrTotalPages <= 1 ? null : (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--gray-200)', fontSize: 13 }}>
+      <span style={{ color: 'var(--gray-500)' }}>
+        Page <strong>{hrPage}</strong> of <strong>{hrTotalPages}</strong>
+        {hrTotal > 0 && <> &nbsp;({hrTotal} total records today)</>}
+      </span>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Btn variant="secondary" size="xs" disabled={hrPage <= 1} onClick={() => setHrPage(p => p - 1)}>
+          <ChevronLeft size={13} /> Prev
+        </Btn>
+        <Btn variant="secondary" size="xs" disabled={hrPage >= hrTotalPages} onClick={() => setHrPage(p => p + 1)}>
+          Next <ChevronRight size={13} />
+        </Btn>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -210,7 +265,6 @@ export default function Attendance() {
               {time.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
 
-            {/* Today's status */}
             {todayStatus && (
               <div
                 style={{
@@ -312,14 +366,28 @@ export default function Attendance() {
         </>
       )}
 
-      {/* HR Tab */}
+      {/* HR Tab — Fixed: now paginated */}
       {tab === 'hr' && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px', borderBottom: '1px solid var(--gray-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontWeight: 500 }}>Today's Clock Events</span>
-            <Btn size="sm" onClick={handleAutoClockOut}>Force Auto Clock-Out</Btn>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--gray-500)', display: 'flex', alignItems: 'center' }}>
+                {hrTotal > 0 && `${hrTotal} total`}
+              </span>
+              <Btn size="sm" onClick={handleAutoClockOut}>Force Auto Clock-Out</Btn>
+            </div>
           </div>
-          <Table cols={hrCols} rows={hrToday} loading={loading} emptyMsg="No attendance recorded today" />
+          {/* Fixed: overlay spinner keeps old data visible */}
+          <div style={{ position: 'relative' }}>
+            {loading && hrRecords.length > 0 && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>Loading…</span>
+              </div>
+            )}
+            <Table cols={hrCols} rows={hrRecords} loading={loading && hrRecords.length === 0} emptyMsg="No attendance recorded today" />
+          </div>
+          <HrPaginationBar />
         </Card>
       )}
 

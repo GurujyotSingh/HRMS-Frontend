@@ -6,7 +6,7 @@ from pydantic import BaseModel
 # ── Chat ──────────────────────────────────────────────────────────────────────
 
 class ChatMessageRead(BaseModel):
-    id: int
+    id: str
     role: str
     content: str
     agent: Optional[str] = None
@@ -17,8 +17,8 @@ class ChatMessageRead(BaseModel):
 
 
 class ChatSessionRead(BaseModel):
-    id: int
-    user_id: int
+    id: str
+    user_id: str
     title: Optional[str] = None
     status: str
     created_at: datetime
@@ -29,13 +29,13 @@ class ChatSessionRead(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: Optional[int] = None   # if None, new session is created
+    session_id: Optional[str] = None   # if None, new session is created
     confirm: bool = False               # set True when confirming a destructive action
 
 
 class ChatResponse(BaseModel):
     response: str
-    session_id: int
+    session_id: str
     requires_confirmation: bool = False
     pending_action: Optional[dict] = None
     llm_used: str
@@ -44,7 +44,7 @@ class ChatResponse(BaseModel):
 # ── Autonomous agents ─────────────────────────────────────────────────────────
 
 class PayslipExplainRequest(BaseModel):
-    employee_id: int
+    employee_id: str
     month: int
     year: int
 
@@ -59,7 +59,7 @@ class GoalSuggestRequest(BaseModel):
 
 
 class AttendanceAnomalyRequest(BaseModel):
-    employee_id: int
+    employee_id: str
     months: int = 3   # how many months back to analyze
 
 

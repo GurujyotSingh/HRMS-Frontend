@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card } from '../ui';
+import { Card, Skeleton } from '../ui';
 import { Users, FileText, Clock, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardAPI } from '../../services/api';
@@ -34,8 +34,8 @@ export default function DirectorDashboard() {
             <Users size={28} color="var(--primary)" />
             <div>
               <div style={{ fontSize: 13, color: 'var(--gray-500)', fontWeight: 600 }}>Team Size</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)' }}>
-                {loading ? '—' : stats.teamSize ?? 0}
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)', minHeight: 34, display: 'flex', alignItems: 'center' }}>
+                {loading ? <Skeleton width="40px" height="28px" /> : stats.teamSize ?? 0}
               </div>
             </div>
           </div>
@@ -46,8 +46,8 @@ export default function DirectorDashboard() {
             <Clock size={28} color="var(--success)" />
             <div>
               <div style={{ fontSize: 13, color: 'var(--gray-500)', fontWeight: 600 }}>Present Today</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--success)' }}>
-                {loading ? '—' : stats.todayPresent ?? 0}
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--success)', minHeight: 34, display: 'flex', alignItems: 'center' }}>
+                {loading ? <Skeleton width="40px" height="28px" /> : stats.todayPresent ?? 0}
               </div>
             </div>
           </div>
@@ -58,8 +58,8 @@ export default function DirectorDashboard() {
             <FileText size={28} color="var(--warning)" />
             <div>
               <div style={{ fontSize: 13, color: 'var(--gray-500)', fontWeight: 600 }}>Pending Leaves</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--warning)' }}>
-                {loading ? '—' : stats.pending ?? 0}
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--warning)', minHeight: 34, display: 'flex', alignItems: 'center' }}>
+                {loading ? <Skeleton width="40px" height="28px" /> : stats.pending ?? 0}
               </div>
             </div>
           </div>
@@ -70,8 +70,8 @@ export default function DirectorDashboard() {
             <CheckCircle size={28} color="var(--danger, #ef4444)" />
             <div>
               <div style={{ fontSize: 13, color: 'var(--gray-500)', fontWeight: 600 }}>On Leave</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--danger, #ef4444)' }}>
-                {loading ? '—' : stats.onLeave ?? 0}
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--danger, #ef4444)', minHeight: 34, display: 'flex', alignItems: 'center' }}>
+                {loading ? <Skeleton width="40px" height="28px" /> : stats.onLeave ?? 0}
               </div>
             </div>
           </div>
@@ -79,26 +79,41 @@ export default function DirectorDashboard() {
       </div>
 
       {/* Team members */}
-      {team.length > 0 && (
+      {(loading || team.length > 0) && (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 14 }}>
             Department Team
           </div>
           <div style={{ display: 'grid', gap: 0 }}>
-            {team.slice(0, 8).map((member) => (
-              <div
-                key={member.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border-light, var(--border))' }}
-              >
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
-                  {member.first_name?.[0]}{member.last_name?.[0]}
+            {loading ? (
+              [1, 2, 3].map((n) => (
+                <div
+                  key={n}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border-light, var(--border))' }}
+                >
+                  <Skeleton width="36px" height="36px" variant="circular" />
+                  <div>
+                    <Skeleton width="120px" height="14px" style={{ marginBottom: 4 }} />
+                    <Skeleton width="80px" height="12px" />
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{member.first_name} {member.last_name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{member.designation || member.role}</div>
+              ))
+            ) : (
+              team.slice(0, 8).map((member) => (
+                <div
+                  key={member.id}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border-light, var(--border))' }}
+                >
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
+                    {member.first_name?.[0]}{member.last_name?.[0]}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{member.first_name} {member.last_name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{member.designation || member.role}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
       )}

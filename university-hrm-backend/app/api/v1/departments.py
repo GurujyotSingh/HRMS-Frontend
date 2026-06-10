@@ -39,6 +39,8 @@ class DepartmentOut(BaseModel):
     name: str
     code: str
     director_id: Optional[str] = None
+    director_name: Optional[str] = None
+    director_email: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -53,8 +55,23 @@ async def list_departments(
     db: AsyncSession = Depends(get_db),
 ):
     """All authenticated users: list all departments."""
-    result = await db.execute(select(Department).order_by(Department.name))
-    return result.scalars().all()
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(select(Department).options(selectinload(Department.director)).order_by(Department.name))
+    depts = result.scalars().all()
+    out = []
+    for d in depts:
+        data = {
+            "id": d.id,
+            "name": d.name,
+            "code": d.code,
+            "director_id": d.director_id,
+            "created_at": d.created_at,
+            "updated_at": d.updated_at,
+            "director_name": f"{d.director.first_name} {d.director.last_name or ''}".strip() if d.director else None,
+            "director_email": d.director.email if d.director else None
+        }
+        out.append(data)
+    return out
 
 
 @router.get("/{department_id}", response_model=DepartmentOut)

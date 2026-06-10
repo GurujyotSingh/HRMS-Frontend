@@ -3,9 +3,9 @@ User model — matches the actual `users` table in PostgreSQL.
 The DB uses VARCHAR UUID strings as PKs (not serial integers).
 The `users` table IS the employee table (no separate employees table in real DB).
 """
+from __future__ import annotations
 from app.db.models.department import Department
 from app.db.models.notification import Notification
-# from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
@@ -71,6 +71,13 @@ class User(Base):
     # References
     reporting_manager_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     position_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Statutory & Financial
+    pan_number: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    uan_number: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    bank_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    bank_account_number: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ifsc_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Preferences
     preferences: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)

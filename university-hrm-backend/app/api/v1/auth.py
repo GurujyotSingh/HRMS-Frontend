@@ -54,6 +54,12 @@ class UserMeResponse(BaseModel):
     profile_photo: Optional[str] = None
     phone: Optional[str] = None
     join_date: Optional[datetime] = None
+    
+    pan_number: Optional[str] = None
+    uan_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -69,13 +75,14 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """Login with email + password. Returns a JWT access token."""
-    user = await authenticate_user(db, body.email, body.password)
+    email = body.email.lower()
+    user = await authenticate_user(db, email, body.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
-    if user.status and user.status.lower() != "active":
+    if user.status and user.status != "ACTIVE":  # enum fix
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is not active",

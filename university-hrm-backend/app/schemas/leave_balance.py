@@ -5,8 +5,8 @@ from app.db.models.enums import LeaveType
 # ── LeaveBalance schemas ──────────────────────────────────────────────────────
 
 class LeaveBalanceRead(BaseModel):
-    id: int
-    employee_id: int
+    id: str
+    employee_id: str
     leave_type: LeaveType
     total_days: int
     used_days: int
@@ -23,7 +23,7 @@ class LeaveBalanceUpdate(BaseModel):
 # ── LeavePolicy schemas ───────────────────────────────────────────────────────
 
 class LeavePolicyRead(BaseModel):
-    id: int
+    id: str
     role_name: str
     leave_type: LeaveType
     default_days: int

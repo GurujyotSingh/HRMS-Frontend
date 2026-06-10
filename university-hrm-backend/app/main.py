@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.exceptions import register_exception_handlers
 from app.core.rate_limit import register_rate_limiter
@@ -37,10 +38,10 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS — allow all origins for development
+# CORS — allow specific origins for credentials
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,6 +74,11 @@ app.include_router(dashboard_router,      prefix="/api/v1")
 
 # Phase 3 — Recruitment
 app.include_router(recruitment_router,    prefix="/api/v1")
+
+import os
+# Ensure static directory exists
+os.makedirs("app/static/payslips", exist_ok=True)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.get("/", tags=["Health"])

@@ -102,7 +102,7 @@ async def apply_leave(
         total_days=data.total_days,
         reason=data.reason,
         attachment_url=data.attachment_url,
-        status="pending",
+        status="PENDING",  # enum fix
         applied_at=now,
         updated_at=now,
     )
@@ -122,9 +122,9 @@ async def cancel_my_leave(
     leave = await _get_leave_or_404(db, leave_id)
     if leave.employee_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your leave request")
-    if leave.status != "pending":
+    if leave.status != "PENDING":  # enum fix
         raise HTTPException(status_code=400, detail="Only pending leaves can be cancelled")
-    leave.status = "cancelled"
+    leave.status = "CANCELLED"  # enum fix
     leave.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(leave)
@@ -144,7 +144,7 @@ async def hod_pending_leaves(
         .join(User, User.id == LeaveRequest.employee_id)
         .where(
             User.department_id == current_user.department_id,
-            LeaveRequest.status == "pending",
+            LeaveRequest.status == "PENDING",  # enum fix
             LeaveRequest.employee_id != current_user.id,
         )
         .order_by(LeaveRequest.applied_at)
@@ -160,7 +160,7 @@ async def hod_approve(
 ):
     """HOD: approve a leave."""
     leave = await _get_leave_or_404(db, leave_id)
-    leave.status = "approved"
+    leave.status = "APPROVED"  # enum fix
     leave.reviewed_by_id = current_user.id
     leave.reviewed_at = datetime.now(timezone.utc)
     leave.updated_at = datetime.now(timezone.utc)
@@ -177,7 +177,7 @@ async def hod_reject(
 ):
     """HOD: reject a leave."""
     leave = await _get_leave_or_404(db, leave_id)
-    leave.status = "rejected"
+    leave.status = "REJECTED"  # enum fix
     leave.reviewed_by_id = current_user.id
     leave.reviewed_at = datetime.now(timezone.utc)
     leave.updated_at = datetime.now(timezone.utc)
@@ -216,7 +216,7 @@ async def hr_queue(
     """HR: view leaves awaiting HR action (pending or hod_approved)."""
     result = await db.execute(
         select(LeaveRequest)
-        .where(LeaveRequest.status.in_(["pending", "approved"]))
+        .where(LeaveRequest.status.in_(["PENDING", "APPROVED"]))  # enum fix
         .order_by(LeaveRequest.applied_at)
     )
     return result.scalars().all()
@@ -233,7 +233,7 @@ async def hr_process_leave(
     if body.action not in ("approve", "reject"):
         raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
     leave = await _get_leave_or_404(db, leave_id)
-    leave.status = "approved" if body.action == "approve" else "rejected"
+    leave.status = "APPROVED" if body.action == "approve" else "REJECTED"  # enum fix
     leave.reviewed_by_id = current_user.id
     leave.reviewed_at = datetime.now(timezone.utc)
     leave.updated_at = datetime.now(timezone.utc)

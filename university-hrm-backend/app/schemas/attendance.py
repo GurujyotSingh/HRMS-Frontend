@@ -4,8 +4,8 @@ from pydantic import BaseModel
 
 
 class AttendanceRead(BaseModel):
-    id: int
-    employee_id: int
+    id: str
+    employee_id: str
     date: date
     clock_in: Optional[datetime] = None
     clock_out: Optional[datetime] = None
@@ -23,7 +23,7 @@ class AttendanceUpdateHR(BaseModel):
     status: Optional[str] = None
 class AttendanceSummary(BaseModel):
     """Monthly summary for a single employee."""
-    employee_id: int
+    employee_id: str
     month: int
     year: int
     total_days_present: int

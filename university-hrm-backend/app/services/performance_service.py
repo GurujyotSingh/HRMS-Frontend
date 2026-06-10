@@ -32,7 +32,7 @@ async def get_all_cycles(db: AsyncSession) -> list[AppraisalCycle]:
 
 async def get_active_cycle(db: AsyncSession) -> AppraisalCycle | None:
     result = await db.execute(
-        select(AppraisalCycle).where(AppraisalCycle.status == "active")
+        select(AppraisalCycle).where(AppraisalCycle.status == "ACTIVE")  # enum fix
     )
     return result.scalar_one_or_none()
 
@@ -42,7 +42,7 @@ async def close_cycle(db: AsyncSession, cycle_id: int) -> AppraisalCycle:
     cycle = result.scalar_one_or_none()
     if not cycle:
         raise ValueError("Cycle not found")
-    cycle.status = "closed"
+    cycle.status = "CLOSED"  # enum fix
     await db.commit()
     await db.refresh(cycle)
     return cycle
@@ -58,7 +58,7 @@ async def create_goal(db: AsyncSession, employee_id: int, data: GoalCreate) -> P
     cycle = result.scalar_one_or_none()
     if not cycle:
         raise ValueError("Appraisal cycle not found")
-    if cycle.status != "active":
+    if cycle.status != "ACTIVE":  # enum fix
         raise ValueError("Cannot set goals for a closed appraisal cycle")
 
     # Check no duplicate
@@ -75,7 +75,7 @@ async def create_goal(db: AsyncSession, employee_id: int, data: GoalCreate) -> P
         employee_id=employee_id,
         cycle_id=data.cycle_id,
         goals_text=data.goals_text,
-        status="draft",
+        status="DRAFT",  # enum fix
     )
     db.add(goal)
     await db.commit()
@@ -86,9 +86,9 @@ async def create_goal(db: AsyncSession, employee_id: int, data: GoalCreate) -> P
 async def submit_goal(db: AsyncSession, goal_id: int, employee_id: int) -> PerformanceGoal:
     """Employee submits draft goals for HOD review."""
     goal = await _get_goal_for_employee(db, goal_id, employee_id)
-    if goal.status != "draft":
+    if goal.status != "DRAFT":  # enum fix
         raise ValueError("Only draft goals can be submitted")
-    goal.status = "submitted"
+    goal.status = "SUBMITTED"  # enum fix
     goal.updated_at = _utcnow()
     await db.commit()
     await db.refresh(goal)
@@ -98,7 +98,7 @@ async def submit_goal(db: AsyncSession, goal_id: int, employee_id: int) -> Perfo
 async def self_review(db: AsyncSession, goal_id: int, employee_id: int, data: GoalSelfReview) -> PerformanceGoal:
     """Employee submits self-rating."""
     goal = await _get_goal_for_employee(db, goal_id, employee_id)
-    if goal.status not in ("submitted", "draft"):
+    if goal.status not in ("SUBMITTED", "DRAFT"):  # enum fix
         raise ValueError("Cannot self-review at this stage")
     goal.self_rating = data.self_rating
     goal.self_comments = data.self_comments
@@ -129,7 +129,7 @@ async def get_submitted_goals_for_hod(db: AsyncSession, department_id: int) -> l
         .options(selectinload(PerformanceGoal.cycle), selectinload(PerformanceGoal.employee))
         .where(
             Employee.department_id == department_id,
-            PerformanceGoal.status == "submitted",
+            PerformanceGoal.status == "SUBMITTED",  # enum fix
         )
     )
     return result.scalars().all()
@@ -150,14 +150,14 @@ async def hod_review(
     goal = result.scalar_one_or_none()
     if not goal:
         raise ValueError("Goal not found or not in your department")
-    if goal.status != "submitted":
+    if goal.status != "SUBMITTED":  # enum fix
         raise ValueError("Can only review submitted goals")
 
     goal.hod_rating = data.hod_rating
     goal.hod_comments = data.hod_comments
     goal.reviewed_by_id = hod_user_id
     goal.reviewed_at = _utcnow()
-    goal.status = "hod_reviewed"
+    goal.status = "HOD_REVIEWED"  # enum fix
     goal.updated_at = _utcnow()
     await db.commit()
     await db.refresh(goal)
@@ -184,14 +184,14 @@ async def hr_finalize(
     goal = result.scalar_one_or_none()
     if not goal:
         raise ValueError("Goal not found")
-    if goal.status != "hod_reviewed":
+    if goal.status != "HOD_REVIEWED":  # enum fix
         raise ValueError("Goal must be HOD-reviewed before HR can finalize")
 
     goal.final_rating = data.final_rating
     goal.hr_comments = data.hr_comments
     goal.finalized_by_id = hr_user_id
     goal.finalized_at = _utcnow()
-    goal.status = "finalized"
+    goal.status = "FINALIZED"  # enum fix
     goal.updated_at = _utcnow()
     await db.commit()
     await db.refresh(goal)

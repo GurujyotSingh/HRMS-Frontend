@@ -13,7 +13,7 @@ class AppraisalCycleCreate(BaseModel):
 
 
 class AppraisalCycleRead(BaseModel):
-    id: int
+    id: str
     title: str
     year: int
     start_date: datetime
@@ -27,13 +27,13 @@ class AppraisalCycleRead(BaseModel):
 
 class GoalCreate(BaseModel):
     """Employee submits their goals for a cycle."""
-    cycle_id: int
+    cycle_id: str
     goals_text: str
 
 class GoalAssignHOD(BaseModel):
     """HOD forcibly assigns a goal to an employee."""
-    employee_id: int
-    cycle_id: int
+    employee_id: str
+    cycle_id: str
     goals_text: str
 
 
@@ -77,19 +77,19 @@ class GoalHRFinalize(BaseModel):
 
 
 class PerformanceGoalRead(BaseModel):
-    id: int
-    employee_id: int
-    cycle_id: int
+    id: str
+    employee_id: str
+    cycle_id: str
     goals_text: str
     self_rating: Optional[float] = None
     self_comments: Optional[str] = None
     hod_rating: Optional[float] = None
     hod_comments: Optional[str] = None
-    reviewed_by_id: Optional[int] = None
+    reviewed_by_id: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     final_rating: Optional[float] = None
     hr_comments: Optional[str] = None
-    finalized_by_id: Optional[int] = None
+    finalized_by_id: Optional[str] = None
     finalized_at: Optional[datetime] = None
     status: str
     created_at: datetime
@@ -116,7 +116,7 @@ class LeaveStatsReport(BaseModel):
 
 
 class AttendanceSummaryReport(BaseModel):
-    employee_id: int
+    employee_id: str
     employee_name: str
     days_present: int
     days_absent: int

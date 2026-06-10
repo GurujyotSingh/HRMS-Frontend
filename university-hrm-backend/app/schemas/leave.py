@@ -41,14 +41,14 @@ class LeaveUpdateHR(BaseModel):
 
 
 class LeaveRead(BaseModel):
-    id: int
-    employee_id: int
+    id: str
+    employee_id: str
     leave_type: LeaveType
     start_date: date
     end_date: date
     reason: str
     status: LeaveStatus
-    approved_by_hod_id: Optional[int] = None
-    approved_by_hr_id: Optional[int] = None
+    approved_by_hod_id: Optional[str] = None
+    approved_by_hr_id: Optional[str] = None
 
     model_config = {"from_attributes": True}

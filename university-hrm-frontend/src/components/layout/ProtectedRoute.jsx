@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
  *   (which includes DIRECTOR alias for any legacy 'hod'/'department_head' checks)
  */
 export default function ProtectedRoute({ children, roles }) {
-  const { user, loading, hasRole } = useAuth();
+  const { user, loading, canAccess } = useAuth();
   const location = useLocation();
 
   // Still bootstrapping — show nothing until we know if user is logged in
@@ -34,7 +34,7 @@ export default function ProtectedRoute({ children, roles }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (roles?.length && !hasRole(...roles)) {
+  if (roles?.length && !canAccess(...roles)) {
     return <Navigate to="/dashboard" replace />;
   }
 

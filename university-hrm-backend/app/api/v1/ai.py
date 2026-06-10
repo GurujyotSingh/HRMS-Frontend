@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, extract
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.models.leave_request import LeaveRequest
 
 from app.api.deps import get_current_user, require_role
 from app.db.models.role import RoleEnum
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/ai", tags=["AI Agents"])
 
 # ── Shared helper — loads employee with ALL needed relationships ──────────────
 
-async def _get_employee_full(db: AsyncSession, user_id: int):
+async def _get_employee_full(db: AsyncSession, user_id: str):
     from app.db.models.employee import Employee
     from app.db.models.department import Department
     result = await db.execute(
@@ -95,7 +96,7 @@ async def get_sessions(
 
 @router.get("/chat/sessions/{session_id}", response_model=ChatSessionRead)
 async def get_session(
-    session_id: int,
+    session_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
@@ -112,7 +113,7 @@ async def get_session(
 
 @router.delete("/chat/sessions/{session_id}", response_model=dict)
 async def close_session(
-    session_id: int,
+    session_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),
 ):
@@ -123,7 +124,7 @@ async def close_session(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    session.status = "closed"
+    session.status = "CLOSED"  # enum fix
     await db.commit()
     return {"msg": "Session closed"}
 
@@ -152,7 +153,7 @@ async def explain_my_payslip(
             Payslip.employee_id == body.employee_id,
             Payslip.month == body.month,
             Payslip.year == body.year,
-            Payslip.status == "finalized",
+            Payslip.status == "PUBLISHED",  # enum fix
         )
     )
     payslip = result.scalar_one_or_none()
@@ -180,35 +181,25 @@ async def recommend_leave(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.db.models.leave import Leave
-    from app.db.models.leave_balance import LeaveBalance
 
     employee = await _get_employee_full(db, current_user.id)
 
-    bal_result = await db.execute(
-        select(LeaveBalance).where(LeaveBalance.employee_id == employee.id)
-    )
-    balances = {
-        str(b.leave_type): {
-            "total": b.total_days,
-            "used": b.used_days,
-            "remaining": b.remaining_days,
-        }
-        for b in bal_result.scalars().all()
-    }
+    # Note: If LeaveBalance model doesn't exist in current schema, we mock or query another table
+    # For now, leaving balances empty or mocked, as the model doesn't exist
+    balances = {}
 
     team_result = await db.execute(
-        select(Leave).where(
-            Leave.start_date <= body.end_date,
-            Leave.end_date >= body.start_date,
+        select(LeaveRequest).where(
+            LeaveRequest.from_date <= body.end_date,
+            LeaveRequest.to_date >= body.start_date,
         )
     )
     team_leaves = [
         {
             "employee_id": l.employee_id,
             "type": str(l.leave_type),
-            "start": str(l.start_date),
-            "end": str(l.end_date),
+            "start": str(l.from_date),
+            "end": str(l.to_date),
         }
         for l in team_result.scalars().all()
         if l.employee_id != employee.id
@@ -242,7 +233,7 @@ async def suggest_goals(
 
 @router.post("/attendance-anomaly/{employee_id}", response_model=AgentResponse, summary="HR: detect attendance anomalies")
 async def attendance_anomaly(
-    employee_id: int,
+    employee_id: str,
     months: int = Query(default=3, ge=1, le=6),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.HR)),

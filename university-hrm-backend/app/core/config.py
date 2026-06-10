@@ -10,5 +10,11 @@ class Settings(BaseSettings):
 	ANTHROPIC_API_KEY: str = ""   
 	OPENAI_API_KEY: str = ""       # optional, used as fallback only
 	GROQ_API_KEY: str = ""
+	PAYROLL_AES_KEY: str = ""
+	
+	SMTP_SERVER: str = "smtp.gmail.com"
+	SMTP_PORT: int = 587
+	SMTP_USER: str = ""
+	SMTP_PASSWORD: str = ""
 
 settings = Settings()

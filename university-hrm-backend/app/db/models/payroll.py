@@ -1,6 +1,5 @@
 """
-Payroll models — match actual `salary_structures` and `payslips` tables.
-DB uses VARCHAR UUID PKs and net_salary (not net_pay), pdf_url, published_at.
+Payroll models (Manual Entry / Encrypted).
 """
 from __future__ import annotations
 from datetime import datetime
@@ -8,71 +7,79 @@ from typing import Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import ENUM
 
 from app.db.base import Base
 
 
-class SalaryStructure(Base):
-    __tablename__ = "salary_structures"
+class PayrollRun(Base):
+    __tablename__ = "payroll_runs"
     __table_args__ = (
-        UniqueConstraint("employee_id", name="uq_salary_employee"),
+        UniqueConstraint("employee_id", "payroll_month", "payroll_year", name="uq_payroll_run_emp_period"),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     employee_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-
-    basic_salary: Mapped[float] = mapped_column(Float, nullable=False)
-    hra: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    ta: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    da: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    other_allowances: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    pf_deduction: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    professional_tax: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    tds_rate: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    working_days_per_month: Mapped[int] = mapped_column(Integer, default=26, nullable=False)
-
+    payroll_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    payroll_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Financial fields are stored as AES-256-GCM encrypted base64 strings
+    gross_salary: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    net_salary: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    total_earnings: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    total_deductions: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    
+    remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Status: Draft, Pending_HR_Review, Pending_Finance_Review, Approved, Paid, Rejected
+    status: Mapped[str] = mapped_column(String, nullable=False, default="Draft")
+    
+    created_by: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    approved_by: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     employee: Mapped["User"] = relationship("User", foreign_keys=[employee_id], lazy="selectin")
+    components: Mapped[list["PayrollComponent"]] = relationship("PayrollComponent", back_populates="payroll_run", cascade="all, delete-orphan")
+
+
+class PayrollComponent(Base):
+    __tablename__ = "payroll_components"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    payroll_run_id: Mapped[str] = mapped_column(String, ForeignKey("payroll_runs.id", ondelete="CASCADE"), nullable=False)
+    
+    component_name: Mapped[str] = mapped_column(String, nullable=False)
+    component_type: Mapped[str] = mapped_column(String, nullable=False) # "earning" or "deduction"
+    
+    # Encrypted base64 string
+    amount: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    payroll_run: Mapped["PayrollRun"] = relationship("PayrollRun", back_populates="components")
 
 
 class Payslip(Base):
     __tablename__ = "payslips"
-    __table_args__ = (
-        UniqueConstraint("employee_id", "month", "year", name="uq_payslip_employee_month_year"),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    employee_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    month: Mapped[int] = mapped_column(Integer, nullable=False)
-    year: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    working_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    days_present: Mapped[int] = mapped_column(Integer, nullable=False)
-    days_absent: Mapped[int] = mapped_column(Integer, nullable=False)
-    days_on_leave: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
-    basic_salary: Mapped[float] = mapped_column(Float, nullable=False)
-    hra: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    ta: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    da: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    other_allowances: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    gross_salary: Mapped[float] = mapped_column(Float, nullable=False)
-
-    absent_deduction: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    pf_deduction: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    professional_tax: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    tds_deduction: Mapped[float] = mapped_column(Float, default=0, nullable=False)
-    total_deductions: Mapped[float] = mapped_column(Float, nullable=False)
-
-    # DB uses net_salary (not net_pay)
-    net_salary: Mapped[float] = mapped_column(Float, nullable=False)
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    pdf_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    status: Mapped[Optional[str]] = mapped_column(ENUM('DRAFT', 'PUBLISHED', name='PayslipStatus', create_type=False), nullable=True)   # draft | published
+    payroll_run_id: Mapped[str] = mapped_column(String, ForeignKey("payroll_runs.id", ondelete="CASCADE"), nullable=False, unique=True)
+    
+    pdf_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    downloaded_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    employee: Mapped["User"] = relationship("User", foreign_keys=[employee_id], lazy="selectin")
+
+class PayrollApprovalHistory(Base):
+    __tablename__ = "payroll_approval_history"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    payroll_run_id: Mapped[str] = mapped_column(String, ForeignKey("payroll_runs.id", ondelete="CASCADE"), nullable=False)
+    
+    action: Mapped[str] = mapped_column(String, nullable=False) # e.g., "SUBMITTED", "APPROVED", "REJECTED"
+    remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    performed_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

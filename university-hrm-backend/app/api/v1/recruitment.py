@@ -220,7 +220,7 @@ async def add_applicant(
         email=data.email,
         phone=data.phone,
         resume_url=data.resume_url,
-        status="applied",
+        status="APPLIED",  # enum fix
         notes=data.notes,
         applied_at=now,
         updated_at=now,

@@ -21,7 +21,7 @@ class AppraisalCycle(Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    status: Mapped[str] = mapped_column(String, default="active", nullable=False)  # active | closed
+    status: Mapped[str] = mapped_column(String, default="ACTIVE", nullable=False)  # ACTIVE | CLOSED
 
     goals: Mapped[list["PerformanceGoal"]] = relationship("PerformanceGoal", back_populates="cycle", lazy="selectin")
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { onboardAPI, employeesAPI } from '../services/api';
 import {
-  PageHeader, Card, Table, Btn, Modal, Input, Textarea, Badge, Tabs, Spinner, toast, Select,
+  PageHeader, Card, Table, Btn, Modal, Input, Textarea, Badge, Tabs, Skeleton, toast, Select,
 } from '../components/ui';
 import { CheckCircle2, Circle, UserMinus, Eye } from 'lucide-react';
 
@@ -47,12 +47,13 @@ export default function Onboarding() {
 
         try {
           const { data } = await onboardAPI.offAll();
+          setViewOff(null); // Clear active detail view during refresh if needed
           setOffRecords(data?.data || data || []);
         } catch { setOffRecords([]); }
         
         try {
           const { data } = await employeesAPI.list();
-          setEmpList(data?.data || data || []);
+          setEmpList(data?.items || data?.data || data || []);
         } catch { setEmpList([]); }
       }
     } catch (e) {
@@ -96,7 +97,7 @@ export default function Onboarding() {
     setSubmitting(true);
     try {
       await onboardAPI.offInitiate({
-        employee_id: parseInt(offForm.employee_id),
+        employee_id: offForm.employee_id,
         reason: offForm.reason,
         lastWorkingDate: offForm.lastWorkingDate,
       });
@@ -113,9 +114,22 @@ export default function Onboarding() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-        <Spinner size={32} />
-      </div>
+      <>
+        <PageHeader title="Onboarding & Offboarding" subtitle="Track employee onboarding tasks and offboarding processes" />
+        <Skeleton width="100%" height="40px" style={{ marginBottom: 24 }} />
+        <Card style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 16 }}>
+            <Skeleton width="200px" height="20px" style={{ marginBottom: 8 }} />
+            <Skeleton width="120px" height="14px" />
+          </div>
+          <Skeleton width="100%" height="8px" style={{ marginBottom: 20 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[1, 2, 3].map(i => (
+              <Skeleton key={i} width="100%" height="52px" style={{ borderRadius: '6px' }} />
+            ))}
+          </div>
+        </Card>
+      </>
     );
   }
 

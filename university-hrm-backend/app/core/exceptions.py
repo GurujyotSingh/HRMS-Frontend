@@ -75,11 +75,24 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(IntegrityError)
     async def integrity_error_handler(request: Request, exc: IntegrityError):
-        message = "A record with this data already exists."
+        message = "A database integrity error occurred."
+        detail_msg = ""
+        
+        # Attempt to extract the specific detail from asyncpg/psycopg2 errors
+        if hasattr(exc.orig, 'diag') and hasattr(exc.orig.diag, 'message_detail'):
+            detail_msg = f" ({exc.orig.diag.message_detail})"
+        else:
+            # Fallback parsing
+            error_str = str(exc.orig)
+            if "DETAIL:" in error_str:
+                detail_msg = " (" + error_str.split("DETAIL:")[1].split("\n")[0].strip() + ")"
+
         if "unique" in str(exc.orig).lower():
-            message = "Duplicate entry — this record already exists."
+            message = f"Duplicate entry — this record already exists.{detail_msg}"
         elif "foreign key" in str(exc.orig).lower():
-            message = "Referenced record does not exist."
+            message = f"Referenced record does not exist or invalid relationship.{detail_msg}"
+            
+        print(f"[ERROR] IntegrityError on {request.url.path}: {message}")
         return _error_response("DB_INTEGRITY_ERROR", message, status.HTTP_409_CONFLICT)
 
     @app.exception_handler(Exception)

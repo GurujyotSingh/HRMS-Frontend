@@ -35,7 +35,7 @@ async def register_user(db: AsyncSession, user_in: UserCreate) -> User:
         work_email=user_in.email,
         password_hash=get_password_hash(user_in.password),
         role=user_in.role_name or "employee",
-        status="active",
+        status="ACTIVE",  # enum fix
         needs_password_change=False,
         failed_login_attempts=0,
         created_at=now,
@@ -57,7 +57,13 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
     if user.locked_until and user.locked_until > datetime.now(timezone.utc):
         return None
     # Verify password against password_hash column
-    if not verify_password(password, user.password_hash):
+    try:
+        from passlib.exc import UnknownHashError
+        is_valid = verify_password(password, user.password_hash)
+    except UnknownHashError:
+        is_valid = False
+
+    if not is_valid:
         # Increment failed attempts
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
         await db.commit()

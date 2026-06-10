@@ -75,8 +75,13 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     <aside
       className={`sidebar ${mobileOpen ? 'open' : ''}`}
       style={{
-        width: collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)'
+        width: collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)',
+        background: 'linear-gradient(180deg, #1a1245 0%, #140d38 100%)',
+        transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        overflowX: 'hidden'
       }}
+      onMouseEnter={() => setCollapsed(false)}
+      onMouseLeave={() => setCollapsed(true)}
     >
       <style>{`
   /* Active nav item connects to the RIGHT side */
@@ -102,6 +107,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     background: radial-gradient(circle at 100% 0%, transparent 20px, var(--bg) 21px);
     pointer-events: none;
     z-index: 1;
+    rotate: -90deg;
   }
 
   /* Concave corner BELOW active item - RIGHT SIDE */
@@ -115,6 +121,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     background: radial-gradient(circle at 100% 100%, transparent 20px, var(--bg) 21px);
     pointer-events: none;
     z-index: 1;
+    rotate: 90deg;
   }
 `}</style>
 
@@ -144,27 +151,17 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
           </svg>
         </div>
 
-        {!collapsed && (
-          <div style={{ animation: 'fadeIn 0.2s ease', overflow: 'hidden', textAlign: 'left' }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.15 }}>UniHRM</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase' }}>HR Portal</div>
-          </div>
-        )}
-
-        <div style={{
-          width: 38, height: 38, borderRadius: 10,
-          background: 'linear-gradient(135deg, var(--secondary) 0%, #ff8c00 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-          boxShadow: '0 4px 14px rgba(255,172,12,0.35)',
+        <div style={{ 
+          opacity: collapsed ? 0 : 1, 
+          transition: 'opacity 0.2s', 
+          overflow: 'hidden', 
+          textAlign: 'left',
+          whiteSpace: 'nowrap'
         }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1760" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
+          <div style={{ fontSize: 17, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.15 }}>UniHRM</div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase' }}>HR Portal</div>
         </div>
+
       </div>
 
       {/* ── Navigation ────────────────────────────────────── */}
@@ -175,7 +172,6 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       }}>
         {visibleItems.map((item, i) => {
           if (item.section) {
-            if (collapsed) return <div key={`s-${i}`} style={{ height: 18 }} />;
             return (
               <div key={`s-${i}`} style={{
                 fontSize: 10, fontWeight: 700,
@@ -185,6 +181,10 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 padding: '18px 10px 6px',
                 textAlign: 'left',
                 userSelect: 'none',
+                opacity: collapsed ? 0 : 1,
+                transition: 'opacity 0.2s',
+                whiteSpace: 'nowrap',
+                height: 38 // Prevent layout jumping
               }}>
                 {item.section}
               </div>
@@ -205,7 +205,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 display: 'flex',
                 alignItems: 'center',
                 gap: 11,
-                padding: collapsed ? '10px 0' : '10px 14px',
+                padding: '10px 14px',
                 marginLeft: isActive ? 0 : 10,
                 marginRight: 0,
                 marginBottom: 2,
@@ -213,13 +213,14 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 textDecoration: 'none',
                 fontSize: 13,
                 fontWeight: isActive ? 700 : 500,
-                justifyContent: collapsed ? 'center' : 'flex-start',
+                justifyContent: 'flex-start',
                 position: 'relative',
                 letterSpacing: '-0.01em',
                 transition: isActive ? 'none' : 'all 0.18s ease',
                 background: isActive ? 'var(--bg)' : 'transparent',
                 color: isActive ? 'var(--primary)' : 'var(--sidebar-text)',
                 zIndex: isActive ? 2 : 'auto',
+                whiteSpace: 'nowrap'
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
@@ -239,7 +240,13 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 strokeWidth={isActive ? 2.5 : 1.8}
                 style={{ flexShrink: 0 }}
               />
-              {!collapsed && <span>{item.label}</span>}
+              <span style={{ 
+                opacity: collapsed ? 0 : 1, 
+                transition: 'opacity 0.2s',
+                whiteSpace: 'nowrap'
+              }}>
+                {item.label}
+              </span>
             </NavLink>
           );
         })}
@@ -248,31 +255,6 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       {/* User Profile & Collapse Toggle - mirrored similarly */}
       {/* ... (I can add the full mirrored bottom part if you want) ... */}
 
-      {/* Collapse Toggle */}
-      <div style={{ padding: '10px', borderTop: '1px solid var(--sidebar-border)', flexShrink: 0 }}>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          style={{
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-end',   // changed
-            gap: 10,
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--sidebar-text)',
-            fontSize: 12,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--sidebar-hover)'; e.currentTarget.style.color = '#fff'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--sidebar-text)'; }}
-        >
-          {collapsed ? <ChevronLeft size={16} /> : <><span>Collapse</span><ChevronRight size={16} /></>}
-        </button>
-      </div>
     </aside>
   );
 }

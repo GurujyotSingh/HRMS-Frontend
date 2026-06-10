@@ -57,7 +57,7 @@ async def clock_in(db: AsyncSession, employee_id: str) -> Attendance:
         date=today,
         check_in=now,
         is_late=is_late,
-        status="present",
+        status="PRESENT",  # enum fix
         created_at=now,
         updated_at=now,
     )

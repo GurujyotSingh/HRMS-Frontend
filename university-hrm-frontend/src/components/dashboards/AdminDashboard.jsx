@@ -3,7 +3,7 @@ import { Users, Building2, Wallet, CalendarDays, Clock, UserPlus, TrendingUp } f
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 import { dashboardAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Card, Spinner } from '../../components/ui';
+import { Card, Spinner, Skeleton } from '../../components/ui';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -28,7 +28,15 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     dashboardAPI.admin()
-      .then(({ data: d }) => setData(d))
+      .then(({ data: d }) => {
+        // d contains: total_employees, pending_leaves, today_present, onboarding_in_progress, draft_payslips_this_month, pending_performance_reviews, etc.
+        setData({
+          stats: d,
+          recentHires: [], // Not provided by backend yet
+          departments: [], // Not provided by backend yet
+          leaveTrend: []   // Not provided by backend yet
+        });
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -39,12 +47,12 @@ export default function AdminDashboard() {
   const leaveTrend  = data?.leaveTrend  || [];
 
   const statCards = [
-    { label: 'Total Employees',  value: stats.totalEmployees  ?? '—', icon: <Users size={22} />,      color: 'var(--primary)',  bg: 'var(--blue-50)'  },
-    { label: 'Active Today',     value: stats.todayPresent    ?? '—', icon: <Clock size={22} />,      color: 'var(--success)',  bg: 'var(--green-50)' },
-    { label: 'On Leave Today',   value: stats.onLeaveToday    ?? '—', icon: <CalendarDays size={22} />, color: 'var(--warning)', bg: 'var(--yellow-50)'},
-    { label: 'Pending Leaves',   value: stats.pendingLeaves   ?? '—', icon: <TrendingUp size={22} />, color: '#f97316',         bg: '#fff7ed'         },
-    { label: 'Departments',      value: stats.departmentCount ?? '—', icon: <Building2 size={22} />,  color: '#8b5cf6',         bg: '#f5f3ff'         },
-    { label: 'Payroll (Month)',  value: stats.totalPayrollThisMonth ? `₹${(stats.totalPayrollThisMonth / 100000).toFixed(1)}L` : '—', icon: <Wallet size={22} />, color: '#06b6d4', bg: '#ecfeff' },
+    { label: 'Total Employees',  value: stats.total_employees ?? '—', icon: <Users size={22} />,      color: 'var(--primary)',  bg: 'var(--blue-50)'  },
+    { label: 'Active Today',     value: stats.today_present ?? '—', icon: <Clock size={22} />,      color: 'var(--success)',  bg: 'var(--green-50)' },
+    { label: 'Onboarding',       value: stats.onboarding_in_progress ?? '—', icon: <CalendarDays size={22} />, color: 'var(--warning)', bg: 'var(--yellow-50)'},
+    { label: 'Pending Leaves',   value: stats.pending_leaves ?? '—', icon: <TrendingUp size={22} />, color: '#f97316',         bg: '#fff7ed'         },
+    { label: 'Draft Payslips',   value: stats.draft_payslips_this_month ?? '—', icon: <Wallet size={22} />, color: '#8b5cf6', bg: '#f5f3ff' },
+    { label: 'Pending Reviews',  value: stats.pending_performance_reviews ?? '—', icon: <Building2 size={22} />, color: '#06b6d4', bg: '#ecfeff' },
   ];
 
   return (
@@ -63,23 +71,25 @@ export default function AdminDashboard() {
             <div style={{ width: 48, height: 48, borderRadius: 12, background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color, flexShrink: 0 }}>
               {stat.icon}
             </div>
-            <div>
-              <div className="stat-value">{loading ? '—' : stat.value}</div>
+            <div style={{ flexGrow: 1 }}>
+              <div className="stat-value" style={{ minHeight: 34 }}>
+                {loading ? <Skeleton width="60px" height="28px" /> : stat.value}
+              </div>
               <div className="stat-label">{stat.label}</div>
             </div>
           </div>
         ))}
       </div>
 
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner /></div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 24, marginTop: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 24, marginTop: 24 }}>
 
-          {/* Department Headcount */}
-          <Card style={{ padding: 24 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 20 }}>Headcount by Department</h3>
-            <div style={{ height: 280 }}>
+        {/* Department Headcount */}
+        <Card style={{ padding: 24 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 20 }}>Headcount by Department</h3>
+          <div style={{ height: 280 }}>
+            {loading ? (
+              <Skeleton height="100%" variant="rectangular" />
+            ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={departments} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--gray-200)" />
@@ -89,13 +99,17 @@ export default function AdminDashboard() {
                   <Bar dataKey="headCount" name="Employees" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          </Card>
+            )}
+          </div>
+        </Card>
 
-          {/* Leave Trend */}
-          <Card style={{ padding: 24 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 20 }}>Leave Approvals — Last 6 Months</h3>
-            <div style={{ height: 280 }}>
+        {/* Leave Trend */}
+        <Card style={{ padding: 24 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 20 }}>Leave Approvals — Last 6 Months</h3>
+          <div style={{ height: 280 }}>
+            {loading ? (
+              <Skeleton height="100%" variant="rectangular" />
+            ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={leaveTrend} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--gray-200)" />
@@ -105,17 +119,30 @@ export default function AdminDashboard() {
                   <Line type="monotone" dataKey="count" name="Leaves Approved" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--primary)' }} activeDot={{ r: 6 }} />
                 </LineChart>
               </ResponsiveContainer>
-            </div>
-          </Card>
+            )}
+          </div>
+        </Card>
 
-          {/* Recent Hires */}
-          {recentHires.length > 0 && (
-            <Card style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <UserPlus size={16} color="var(--success)" />
-                <span style={{ fontWeight: 600, fontSize: 14 }}>Recent Hires</span>
-              </div>
-              {recentHires.map((emp) => (
+        {/* Recent Hires */}
+        {(loading || recentHires.length > 0) && (
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <UserPlus size={16} color="var(--success)" />
+              <span style={{ fontWeight: 600, fontSize: 14 }}>Recent Hires</span>
+            </div>
+            {loading ? (
+              [1, 2, 3].map((n) => (
+                <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
+                  <Skeleton width="36px" height="36px" variant="circular" />
+                  <div style={{ flex: 1 }}>
+                    <Skeleton width="120px" height="14px" style={{ marginBottom: 4 }} />
+                    <Skeleton width="80px" height="12px" />
+                  </div>
+                  <Skeleton width="40px" height="12px" />
+                </div>
+              ))
+            ) : (
+              recentHires.map((emp) => (
                 <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
                     {emp.first_name?.[0]}{emp.last_name?.[0]}
@@ -128,9 +155,10 @@ export default function AdminDashboard() {
                     {emp.join_date ? new Date(emp.join_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
                   </div>
                 </div>
-              ))}
-            </Card>
-          )}
+              ))
+            )}
+          </Card>
+        )}
         </div>
       )}
     </div>

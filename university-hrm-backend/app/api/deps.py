@@ -44,7 +44,7 @@ async def get_current_user(
 
     result = await db.execute(select(User).where(User.id == str(user_id)))
     user = result.scalar_one_or_none()
-    if not user or (user.status and user.status.lower() != "active"):
+    if not user or (user.status and user.status != "ACTIVE"):  # enum fix
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or inactive user",
@@ -62,7 +62,7 @@ def require_role(*required_roles: RoleEnum):
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         user_role = (current_user.role or "").lower()
         # Admin bypasses all role restrictions
-        if user_role == RoleEnum.ADMIN.value or user_role == "admin":
+        if user_role == RoleEnum.ADMIN.value or user_role == "admin" or user_role == "super_admin":
             return current_user
         # Check if user's role matches any of the required roles
         allowed = [r.value.lower() if isinstance(r, RoleEnum) else r.lower() for r in required_roles]

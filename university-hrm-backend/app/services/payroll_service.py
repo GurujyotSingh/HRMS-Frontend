@@ -1,294 +1,279 @@
-from datetime import datetime, timezone
-from sqlalchemy import select, extract
+import uuid
+from datetime import datetime
+from typing import Optional, List
+from sqlalchemy import select, desc, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Request
 
-from app.db.models.payroll import SalaryStructure, Payslip
-from app.db.models.attendance import Attendance
-from app.db.models.leave_request import LeaveRequest
-from app.db.models.enums import LeaveStatus
-from app.schemas.payroll import SalaryStructureCreate, PayslipGenerate, PayslipSummary, PayslipRead
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+from app.db.models.payroll import PayrollRun, PayrollComponent, Payslip, PayrollApprovalHistory
+from app.db.models.user import User
+from app.schemas.payroll import PayrollRunCreate, PayrollRunUpdate, PayrollComponentCreate
+from app.services.encryption_service import encrypt_value
+from app.services.audit_service import audit, AuditAction
 
 
-def _round2(val: float) -> float:
-    return round(val, 2)
-
-
-# ── Salary Structure ──────────────────────────────────────────────────────────
-
-async def set_salary_structure(
-    db: AsyncSession, employee_id: int, data: SalaryStructureCreate
-) -> SalaryStructure:
-    """HR creates or updates an employee's salary structure."""
-    result = await db.execute(
-        select(SalaryStructure).where(SalaryStructure.employee_id == employee_id)
+async def _create_history(db: AsyncSession, payroll_id: str, action: str, performed_by: str, remarks: Optional[str] = None):
+    history = PayrollApprovalHistory(
+        id=str(uuid.uuid4()),
+        payroll_run_id=payroll_id,
+        action=action,
+        remarks=remarks,
+        performed_by=performed_by,
+        performed_at=datetime.utcnow()
     )
-    structure = result.scalar_one_or_none()
-
-    if structure:
-        # Update existing
-        for field, value in data.model_dump().items():
-            setattr(structure, field, value)
-        structure.updated_at = _utcnow()
-    else:
-        structure = SalaryStructure(employee_id=employee_id, **data.model_dump())
-        db.add(structure)
-
-    await db.commit()
-    await db.refresh(structure)
-    return structure
+    db.add(history)
 
 
-async def get_salary_structure(db: AsyncSession, employee_id: int) -> SalaryStructure | None:
+async def get_payroll(db: AsyncSession, payroll_id: str) -> Optional[PayrollRun]:
     result = await db.execute(
-        select(SalaryStructure).where(SalaryStructure.employee_id == employee_id)
+        select(PayrollRun)
+        .options(selectinload(PayrollRun.components))
+        .where(PayrollRun.id == payroll_id)
     )
     return result.scalar_one_or_none()
 
 
-# ── Payslip calculation ───────────────────────────────────────────────────────
+async def list_payrolls(
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    employee_id: Optional[str] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    status: Optional[str] = None,
+) -> tuple[List[PayrollRun], int]:
+    query = select(PayrollRun).options(selectinload(PayrollRun.components))
+    
+    if employee_id:
+        query = query.where(PayrollRun.employee_id == employee_id)
+    if month:
+        query = query.where(PayrollRun.payroll_month == month)
+    if year:
+        query = query.where(PayrollRun.payroll_year == year)
+    if status:
+        query = query.where(PayrollRun.status == status)
+        
+    count_query = select(func.count(PayrollRun.id)).select_from(query.subquery())
+    total = await db.scalar(count_query) or 0
+    
+    query = query.order_by(PayrollRun.payroll_year.desc(), PayrollRun.payroll_month.desc(), PayrollRun.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    items = result.scalars().all()
+    
+    return list(items), total
 
-async def _get_attendance_stats(
-    db: AsyncSession, employee_id: int, month: int, year: int, working_days: int
-) -> tuple[int, int, int]:
-    """
-    Returns (days_present, days_absent, days_on_leave).
-    days_on_leave = approved leaves in that month (counted as present, not deducted).
-    days_absent   = working_days - days_present - days_on_leave
-    """
-    # Count attendance records marked "present"
-    att_result = await db.execute(
-        select(Attendance).where(
-            Attendance.employee_id == employee_id,
-            extract("month", Attendance.date) == month,
-            extract("year", Attendance.date) == year,
-            Attendance.status == "present",
+
+async def create_payroll(
+    db: AsyncSession, 
+    data: PayrollRunCreate, 
+    current_user: User,
+    request: Request
+) -> PayrollRun:
+    # Check for duplicate
+    existing = await db.scalar(
+        select(PayrollRun).where(
+            PayrollRun.employee_id == data.employee_id,
+            PayrollRun.payroll_month == data.payroll_month,
+            PayrollRun.payroll_year == data.payroll_year
         )
     )
-    days_present = len(att_result.scalars().all())
-
-    # Count approved leaves in this month
-    leave_result = await db.execute(
-        select(LeaveRequest).where(
-            LeaveRequest.employee_id == str(employee_id),
-            LeaveRequest.status == "approved",
-            extract("month", LeaveRequest.start_date) == month,
-            extract("year", LeaveRequest.start_date) == year,
-        )
-    )
-    approved_leaves = leave_result.scalars().all()
-    days_on_leave = sum(
-        (l.end_date - l.start_date).days + 1 for l in approved_leaves
-    )
-
-    days_absent = max(working_days - days_present - days_on_leave, 0)
-    return days_present, days_absent, days_on_leave
-
-
-def _calculate_payslip(
-    structure: SalaryStructure,
-    days_present: int,
-    days_absent: int,
-    days_on_leave: int,
-) -> dict:
-    """
-    Core calculation logic.
-    Absent days cause per-day deduction.
-    Leave days are treated as paid (no deduction).
-    TDS is applied on gross after other deductions.
-    """
-    working_days = structure.working_days_per_month
-    per_day_rate = float(structure.basic_salary) / working_days
-
-    # Prorate all earnings by (present + on_leave) / working_days
-    paid_days = days_present + days_on_leave
-    ratio = paid_days / working_days if working_days > 0 else 0
-
-    basic = _round2(float(structure.basic_salary) * ratio)
-    hra = _round2(float(structure.hra) * ratio)
-    ta = _round2(float(structure.ta) * ratio)
-    da = _round2(float(structure.da) * ratio)
-    other = _round2(float(structure.other_allowances) * ratio)
-    gross = _round2(basic + hra + ta + da + other)
-
-    # Deductions
-    absent_deduction = _round2(per_day_rate * days_absent)
-    pf = _round2(float(structure.pf_deduction))
-    prof_tax = _round2(float(structure.professional_tax))
-    tds = _round2(gross * float(structure.tds_rate) / 100)
-
-    total_deductions = _round2(absent_deduction + pf + prof_tax + tds)
-    net_pay = _round2(gross - total_deductions)
-
-    return {
-        "working_days": working_days,
-        "days_present": days_present,
-        "days_absent": days_absent,
-        "days_on_leave": days_on_leave,
-        "basic_salary": basic,
-        "hra": hra,
-        "ta": ta,
-        "da": da,
-        "other_allowances": other,
-        "gross_salary": gross,
-        "absent_deduction": absent_deduction,
-        "pf_deduction": pf,
-        "professional_tax": prof_tax,
-        "tds_deduction": tds,
-        "total_deductions": total_deductions,
-        "net_pay": net_pay,
-    }
-
-
-# ── Generate payslip ──────────────────────────────────────────────────────────
-
-async def generate_payslip(db: AsyncSession, data: PayslipGenerate) -> Payslip:
-    """
-    HR generates a payslip for an employee for a given month/year.
-    - Fetches salary structure
-    - Fetches attendance stats
-    - Calculates gross, deductions, net pay
-    - Saves as draft (HR can finalize later)
-    """
-    # Check if payslip already exists
-    existing = await db.execute(
-        select(Payslip).where(
-            Payslip.employee_id == data.employee_id,
-            Payslip.month == data.month,
-            Payslip.year == data.year,
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise ValueError(f"Payslip for month {data.month}/{data.year} already exists. Use update endpoint.")
-
-    structure = await get_salary_structure(db, data.employee_id)
-    if not structure:
-        raise ValueError("No salary structure found for this employee. Set it first.")
-
-    days_present, days_absent, days_on_leave = await _get_attendance_stats(
-        db, data.employee_id, data.month, data.year, structure.working_days_per_month
-    )
-
-    calc = _calculate_payslip(structure, days_present, days_absent, days_on_leave)
-
-    payslip = Payslip(
+    if existing:
+        raise ValueError(f"A payroll record for this employee for {data.payroll_month}/{data.payroll_year} already exists.")
+        
+    run_id = str(uuid.uuid4())
+    
+    run = PayrollRun(
+        id=run_id,
         employee_id=data.employee_id,
-        month=data.month,
-        year=data.year,
-        notes=data.notes,
-        status="draft",
-        generated_at=_utcnow(),
-        **calc,
+        payroll_month=data.payroll_month,
+        payroll_year=data.payroll_year,
+        gross_salary=encrypt_value(data.gross_salary),
+        net_salary=encrypt_value(data.net_salary),
+        total_earnings=encrypt_value(data.total_earnings),
+        total_deductions=encrypt_value(data.total_deductions),
+        remarks=data.remarks,
+        status="Draft",
+        created_by=current_user.id,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    db.add(run)
+    await db.flush()
+    
+    for comp in data.components:
+        db.add(PayrollComponent(
+            id=str(uuid.uuid4()),
+            payroll_run_id=run_id,
+            component_name=comp.component_name,
+            component_type=comp.component_type,
+            amount=encrypt_value(comp.amount),
+            created_at=datetime.utcnow()
+        ))
+        
+    await _create_history(db, run_id, "CREATED", current_user.id, "Draft payroll created")
+    
+    # Audit log detail is now a string, because the DB schema was altered to TEXT to bypass asyncpg JSON bugs
+    await audit(db, "PAYROLL_CREATED", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=run_id, detail="Payroll Draft Created", request=request)
+    
+    await db.commit()
+    return await get_payroll(db, run_id)
+
+
+async def update_payroll(
+    db: AsyncSession,
+    payroll_id: str,
+    data: PayrollRunUpdate,
+    current_user: User,
+    request: Request
+) -> Optional[PayrollRun]:
+    run = await get_payroll(db, payroll_id)
+    if not run:
+        return None
+        
+    if data.gross_salary is not None: run.gross_salary = encrypt_value(data.gross_salary)
+    if data.net_salary is not None: run.net_salary = encrypt_value(data.net_salary)
+    if data.total_earnings is not None: run.total_earnings = encrypt_value(data.total_earnings)
+    if data.total_deductions is not None: run.total_deductions = encrypt_value(data.total_deductions)
+    if data.remarks is not None: run.remarks = data.remarks
+    run.updated_at = datetime.utcnow()
+    
+    if data.components is not None:
+        from sqlalchemy import delete
+        await db.execute(delete(PayrollComponent).where(PayrollComponent.payroll_run_id == payroll_id))
+        for comp in data.components:
+            db.add(PayrollComponent(
+                id=str(uuid.uuid4()),
+                payroll_run_id=payroll_id,
+                component_name=comp.component_name,
+                component_type=comp.component_type,
+                amount=encrypt_value(comp.amount),
+                created_at=datetime.utcnow()
+            ))
+            
+    await _create_history(db, payroll_id, "UPDATED", current_user.id, "Payroll updated")
+    await audit(db, "PAYROLL_UPDATED", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=payroll_id, detail="Payroll Updated", request=request)
+    
+    await db.commit()
+    return await get_payroll(db, payroll_id)
+
+
+async def submit_payroll(db: AsyncSession, payroll_id: str, remarks: Optional[str], current_user: User, request: Request) -> Optional[PayrollRun]:
+    run = await get_payroll(db, payroll_id)
+    if not run or run.status != "Draft":
+        raise ValueError("Only Draft payrolls can be submitted")
+        
+    run.status = "Pending_HR_Review"
+    run.updated_at = datetime.utcnow()
+    
+    await _create_history(db, payroll_id, "SUBMITTED", current_user.id, remarks or "Submitted to HR")
+    await audit(db, "PAYROLL_UPDATED", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=payroll_id, detail="Submitted for HR Review", request=request)
+    
+    await db.commit()
+    return run
+
+
+async def approve_payroll(db: AsyncSession, payroll_id: str, remarks: Optional[str], current_user: User, request: Request) -> Optional[PayrollRun]:
+    run = await get_payroll(db, payroll_id)
+    if not run:
+        return None
+        
+    user_role = (current_user.role or "").lower()
+    is_hr = user_role in ["hr", "hr_manager", "hr_staff", "admin", "super_admin"]
+    is_finance = user_role in ["finance", "accountant", "admin", "super_admin"]
+        
+    if run.status == "Pending_HR_Review":
+        if not is_hr:
+            raise ValueError("Only HR can approve this step")
+        run.status = "Pending_Finance_Review"
+        action = "HR_APPROVED"
+        msg = remarks or "Approved by HR, sent to Finance"
+    elif run.status == "Pending_Finance_Review":
+        if not is_finance:
+            raise ValueError("Only Finance can approve this step")
+        run.status = "Approved"
+        run.approved_by = current_user.id
+        run.approved_at = datetime.utcnow()
+        action = "FINANCE_APPROVED"
+        msg = remarks or "Approved by Finance"
+    else:
+        raise ValueError(f"Cannot approve payroll in {run.status} state")
+        
+    run.updated_at = datetime.utcnow()
+    
+    await _create_history(db, payroll_id, action, current_user.id, msg)
+    await audit(db, "PAYROLL_APPROVED", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=payroll_id, detail=msg, request=request)
+    
+    await db.commit()
+    return run
+
+
+async def reject_payroll(db: AsyncSession, payroll_id: str, remarks: Optional[str], current_user: User, request: Request) -> Optional[PayrollRun]:
+    run = await get_payroll(db, payroll_id)
+    if not run:
+        return None
+        
+    run.status = "Rejected"
+    run.updated_at = datetime.utcnow()
+    
+    await _create_history(db, payroll_id, "REJECTED", current_user.id, remarks or "Rejected")
+    await audit(db, "PAYROLL_REJECTED", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=payroll_id, detail="Payroll Rejected", request=request)
+    
+    await db.commit()
+    return run
+
+
+async def mark_paid(db: AsyncSession, payroll_id: str, remarks: Optional[str], current_user: User, request: Request) -> Optional[PayrollRun]:
+    run = await get_payroll(db, payroll_id)
+    if not run or run.status != "Approved":
+        raise ValueError("Only Approved payrolls can be marked as Paid")
+        
+    run.status = "Paid"
+    run.updated_at = datetime.utcnow()
+    
+    await _create_history(db, payroll_id, "MARKED_PAID", current_user.id, remarks or "Marked as Paid")
+    await audit(db, "PAYROLL_MARKED_PAID", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=payroll_id, detail="Marked as Paid", request=request)
+    
+    await db.commit()
+    return run
+
+
+async def generate_payslip(db: AsyncSession, payroll_id: str, current_user: User, request: Request) -> Payslip:
+    # First get the payroll run
+    result = await db.execute(select(PayrollRun).options(selectinload(PayrollRun.components), selectinload(PayrollRun.employee)).where(PayrollRun.id == payroll_id))
+    run = result.scalar_one_or_none()
+    if not run:
+        raise ValueError("Payroll not found")
+        
+    # Check if payslip already generated
+    result = await db.execute(select(Payslip).where(Payslip.payroll_run_id == payroll_id))
+    existing = result.scalar_one_or_none()
+    
+    import os
+    # Generate actual PDF file if it doesn't exist on disk
+    from app.services.pdf_service import generate_payslip_pdf
+    pdf_path = None
+    if not existing or not existing.pdf_path or not os.path.exists(f"app{existing.pdf_path}"):
+        pdf_path = generate_payslip_pdf(run, run.employee)
+        
+    if existing:
+        if pdf_path:
+            existing.pdf_path = pdf_path
+            await db.commit()
+        return existing
+        
+    payslip = Payslip(
+        id=str(uuid.uuid4()),
+        payroll_run_id=payroll_id,
+        pdf_path=pdf_path,
+        generated_at=datetime.utcnow(),
+        downloaded_count=0
     )
     db.add(payslip)
+    
+    await audit(db, "PAYSLIP_GENERATED", user_id=current_user.id, user_email=current_user.email, resource="payslip", resource_id=payslip.id, detail="Payslip metadata generated", request=request)
+    
     await db.commit()
     await db.refresh(payslip)
     return payslip
-
-
-async def finalize_payslip(db: AsyncSession, payslip_id: int) -> Payslip:
-    """HR finalizes a draft payslip — employee can view it after this."""
-    result = await db.execute(select(Payslip).where(Payslip.id == payslip_id))
-    payslip = result.scalar_one_or_none()
-    if not payslip:
-        raise ValueError("Payslip not found")
-    if payslip.status == "finalized":
-        raise ValueError("Payslip already finalized")
-
-    payslip.status = "finalized"
-    payslip.finalized_at = _utcnow()
-    await db.commit()
-    await db.refresh(payslip)
-    return payslip
-
-
-async def regenerate_payslip(db: AsyncSession, payslip_id: int) -> Payslip:
-    """HR recalculates an existing draft payslip (e.g. attendance was updated)."""
-    result = await db.execute(select(Payslip).where(Payslip.id == payslip_id))
-    payslip = result.scalar_one_or_none()
-    if not payslip:
-        raise ValueError("Payslip not found")
-    if payslip.status == "finalized":
-        raise ValueError("Cannot regenerate a finalized payslip")
-
-    structure = await get_salary_structure(db, payslip.employee_id)
-    if not structure:
-        raise ValueError("Salary structure not found")
-
-    days_present, days_absent, days_on_leave = await _get_attendance_stats(
-        db, payslip.employee_id, payslip.month, payslip.year, structure.working_days_per_month
-    )
-
-    calc = _calculate_payslip(structure, days_present, days_absent, days_on_leave)
-    for field, value in calc.items():
-        setattr(payslip, field, value)
-
-    payslip.generated_at = _utcnow()
-    await db.commit()
-    await db.refresh(payslip)
-    return payslip
-
-
-# ── Queries ───────────────────────────────────────────────────────────────────
-
-async def get_employee_payslips(db: AsyncSession, employee_id: int) -> list[Payslip]:
-    """Employee: own finalized payslips only."""
-    result = await db.execute(
-        select(Payslip)
-        .where(
-            Payslip.employee_id == employee_id,
-            Payslip.status == "finalized",
-        )
-        .order_by(Payslip.year.desc(), Payslip.month.desc())
-    )
-    return result.scalars().all()
-
-
-async def get_payslip_by_month(
-    db: AsyncSession, employee_id: int, month: int, year: int
-) -> Payslip | None:
-    result = await db.execute(
-        select(Payslip).where(
-            Payslip.employee_id == employee_id,
-            Payslip.month == month,
-            Payslip.year == year,
-        )
-    )
-    return result.scalar_one_or_none()
-
-
-async def get_monthly_summary(db: AsyncSession, month: int, year: int) -> PayslipSummary:
-    """HR: payroll summary across all employees for a given month."""
-    result = await db.execute(
-        select(Payslip).where(
-            Payslip.month == month,
-            Payslip.year == year,
-        )
-    )
-    payslips = result.scalars().all()
-
-    return PayslipSummary(
-        month=month,
-        year=year,
-        total_employees=len(payslips),
-        total_gross=_round2(sum(float(p.gross_salary) for p in payslips)),
-        total_deductions=_round2(sum(float(p.total_deductions) for p in payslips)),
-        total_net_pay=_round2(sum(float(p.net_pay) for p in payslips)),
-        payslips=[PayslipRead.model_validate(p) for p in payslips],
-    )
-
-
-async def get_all_payslips_for_hr(
-    db: AsyncSession, month: int | None = None, year: int | None = None
-) -> list[Payslip]:
-    query = select(Payslip)
-    if month:
-        query = query.where(Payslip.month == month)
-    if year:
-        query = query.where(Payslip.year == year)
-    query = query.order_by(Payslip.year.desc(), Payslip.month.desc(), Payslip.employee_id)
-    result = await db.execute(query)
-    return result.scalars().all()

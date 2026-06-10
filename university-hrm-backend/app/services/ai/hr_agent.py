@@ -329,7 +329,7 @@ async def get_or_create_session(
             return session
 
     # Create new session
-    session = ChatSession(user_id=user_id, status="active")
+    session = ChatSession(user_id=user_id, status="ACTIVE")
     db.add(session)
     await db.commit()
 

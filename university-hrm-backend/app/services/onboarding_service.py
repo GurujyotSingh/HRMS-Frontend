@@ -57,7 +57,7 @@ async def create_onboarding_for_employee(
         employee_id=employee_id,
         start_date=now,
         expected_completion_date=now + timedelta(days=30),
-        status="in_progress",
+        status="IN_PROGRESS",  # enum fix
         created_at=now,
         updated_at=now,
     )
@@ -119,7 +119,7 @@ async def complete_onboarding_task(
     )
     record = record_result.scalar_one_or_none()
     if record and all(t.is_completed for t in record.tasks):
-        record.status = "completed"
+        record.status = "COMPLETED"  # enum fix
         record.completed_at = _utcnow()
         record.updated_at = _utcnow()
         await db.commit()
@@ -164,8 +164,8 @@ async def initiate_offboarding(
         initiated_by_id=initiated_by_id,
         reason=reason,
         last_working_date=last_working_date,
-        status="in_progress",
-        clearance_status="pending",
+        status="IN_PROGRESS",  # enum fix
+        clearance_status="PENDING",  # enum fix
         initiated_at=now,
     )
     db.add(record)
@@ -234,7 +234,7 @@ async def complete_offboarding_task(
     record = record_result.scalar_one()
 
     if all(t.is_completed for t in record.tasks):
-        record.status = "completed"
+        record.status = "COMPLETED"  # enum fix
         record.completed_at = _utcnow()
         await db.commit()
 

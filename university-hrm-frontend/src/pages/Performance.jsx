@@ -73,7 +73,7 @@ export default function Performance() {
           const { data } = await perfAPI.directorPending();
           setDirectorGoals(data?.data || data || []);
           const { data: emps } = await employeesAPI.list();
-          setTeamMembers(emps?.data || emps || []);
+          setTeamMembers(emps?.items || emps?.data || emps || []);
         } catch { setDirectorGoals([]); setTeamMembers([]); }
       }
 
@@ -128,7 +128,7 @@ export default function Performance() {
     setSubmitting(true);
     try {
       await perfAPI.assignGoal({
-        employee_id: parseInt(assignForm.employee_id),
+        employee_id: assignForm.employee_id,
         cycleId: parseInt(assignForm.cycleId),
         title: assignForm.title,
         description: assignForm.description,

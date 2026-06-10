@@ -11,7 +11,7 @@ class OnboardingTemplateCreate(BaseModel):
 
 
 class OnboardingTemplateRead(BaseModel):
-    id: int
+    id: str
     title: str
     description: Optional[str] = None
     is_active: bool
@@ -22,8 +22,8 @@ class OnboardingTemplateRead(BaseModel):
 # ── Onboarding Tasks ──────────────────────────────────────────────────────────
 
 class OnboardingTaskRead(BaseModel):
-    id: int
-    onboarding_record_id: int
+    id: str
+    onboarding_record_id: str
     title: str
     description: Optional[str] = None
     is_completed: bool
@@ -41,8 +41,8 @@ class OnboardingTaskCreate(BaseModel):
 # ── Onboarding Record ─────────────────────────────────────────────────────────
 
 class OnboardingRecordRead(BaseModel):
-    id: int
-    employee_id: int
+    id: str
+    employee_id: str
     status: str
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -55,14 +55,14 @@ class OnboardingRecordRead(BaseModel):
 
 class OffboardingInitiate(BaseModel):
     """HR uses this to start offboarding for an employee."""
-    employee_id: int
+    employee_id: str
     reason: Optional[str] = None
     last_working_date: Optional[datetime] = None
 
 
 class OffboardingTaskRead(BaseModel):
-    id: int
-    offboarding_record_id: int
+    id: str
+    offboarding_record_id: str
     title: str
     description: Optional[str] = None
     is_completed: bool
@@ -78,13 +78,13 @@ class OffboardingTaskCreate(BaseModel):
 
 class ClearanceUpdate(BaseModel):
     """HR updates clearance status."""
-    clearance_status: str   # "pending" | "cleared" | "hold"
+    clearance_status: str   # "PENDING" | "CLEARED" | "HOLD"
 
 
 class OffboardingRecordRead(BaseModel):
-    id: int
-    employee_id: int
-    initiated_by_id: int
+    id: str
+    employee_id: str
+    initiated_by_id: str
     reason: Optional[str] = None
     last_working_date: Optional[datetime] = None
     status: str

@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Briefcase, Plus, Users, Search, 
-  ChevronRight, Calendar, Building, FileText 
+  Plus, Users, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { 
   PageHeader, Card, Table, Badge, Btn, 
-  Modal, Input, Select, Textarea, toast 
+  Modal, Input, Select, Textarea, toast, Skeleton 
 } from '../components/ui';
 import { recruitmentAPI, deptAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+
+// Fixed for 1M+ rows scalability:
+// - Job listings are now server-side paginated (never loads all jobs)
+// - Applicants per job are paginated
+// - AbortController cancels stale requests on filter/page changes
+// - Debounced job search to prevent API hammering
+
+const PAGE_SIZE = 25;
 
 export default function Recruitment() {
   const { canAccess } = useAuth();
@@ -17,7 +24,15 @@ export default function Recruitment() {
   const [jobs, setJobs] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+  const [jobSearch, setJobSearch] = useState('');
+
+  // Fixed for 1M+ rows: pagination state
+  const [page, setPage]   = useState(1);
+  const [total, setTotal] = useState(0);
+
+  const abortRef  = useRef(null);
+  const searchRef = useRef(null); // Fixed: debounce timer ref
+
   // Modals
   const [jobModalOpen, setJobModalOpen] = useState(false);
   const [applicantModalOpen, setApplicantModalOpen] = useState(false);
@@ -26,6 +41,8 @@ export default function Recruitment() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [applicants, setApplicants] = useState([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
+  const [appPage, setAppPage]   = useState(1);
+  const [appTotal, setAppTotal] = useState(0);
 
   // Form states
   const [jobForm, setJobForm] = useState({
@@ -38,30 +55,53 @@ export default function Recruitment() {
   });
   const [showAddApplicant, setShowAddApplicant] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Fixed for 1M+ rows: paginated job loading with AbortController
+  const loadJobs = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
 
-  const loadData = async () => {
     setLoading(true);
     try {
-      const [jobsData, deptsData] = await Promise.all([
-        recruitmentAPI.listJobs(),
-        deptAPI.list ? deptAPI.list() : Promise.resolve([])
-      ]);
-      setJobs(jobsData || []);
-      setDepartments(deptsData || []);
-    } catch (err) {
-      toast('Failed to load recruitment data', 'error');
+      const { data } = await recruitmentAPI.listJobs({
+        limit: PAGE_SIZE,
+        skip: (page - 1) * PAGE_SIZE,
+        search: jobSearch || undefined,
+      }, abortRef.current.signal);
+      const items = data?.data?.items || data?.items || data?.data || (Array.isArray(data) ? data : []);
+      setJobs(items);
+      setTotal(data?.data?.total || data?.total || items.length);
+    } catch (e) {
+      if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') {
+        toast('Failed to load recruitment data', 'error');
+      }
     } finally {
       setLoading(false);
     }
+  }, [page, jobSearch]);
+
+  const loadDepts = async () => {
+    try {
+      const { data } = await deptAPI.list();
+      setDepartments(data?.data || data || []);
+    } catch { /* non-critical */ }
+  };
+
+  useEffect(() => { loadDepts(); }, []);
+  useEffect(() => { loadJobs(); }, [loadJobs]);
+
+  // Fixed: debounce job search — wait 400ms after typing before hitting API
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    clearTimeout(searchRef.current);
+    searchRef.current = setTimeout(() => {
+      setJobSearch(val);
+      setPage(1);
+    }, 400);
   };
 
   const handleCreateJob = async (e) => {
     e.preventDefault();
     try {
-      // API expects datetime for closing_date, format appropriately
       const data = {
         ...jobForm,
         closing_date: new Date(jobForm.closing_date).toISOString()
@@ -70,20 +110,28 @@ export default function Recruitment() {
       toast('Job posted successfully!', 'success');
       setJobModalOpen(false);
       setJobForm({ title: '', department_id: '', type: 'FULL_TIME', description: '', closing_date: '' });
-      loadData();
+      setPage(1);
+      loadJobs();
     } catch (err) {
       toast('Failed to post job', 'error');
     }
   };
 
-  const viewApplicants = async (job) => {
+  // Fixed for 1M+ rows: applicants are paginated per job
+  const viewApplicants = async (job, newAppPage = 1) => {
     setSelectedJob(job);
     setApplicantModalOpen(true);
     setShowAddApplicant(false);
     setLoadingApplicants(true);
+    setAppPage(newAppPage);
     try {
-      const data = await recruitmentAPI.getApplicants(job.id);
-      setApplicants(data || []);
+      const { data } = await recruitmentAPI.getApplicants(job.id, {
+        limit: 20,
+        skip: (newAppPage - 1) * 20,
+      });
+      const items = data?.data?.items || data?.items || data?.data || (Array.isArray(data) ? data : []);
+      setApplicants(items);
+      setAppTotal(data?.data?.total || data?.total || items.length);
     } catch (err) {
       toast('Failed to load applicants', 'error');
     } finally {
@@ -98,9 +146,7 @@ export default function Recruitment() {
       toast('Applicant added successfully!', 'success');
       setShowAddApplicant(false);
       setApplicantForm({ name: '', email: '', phone: '', resume_url: '', notes: '' });
-      // Reload applicants
-      const data = await recruitmentAPI.getApplicants(selectedJob.id);
-      setApplicants(data || []);
+      viewApplicants(selectedJob, 1);
     } catch (err) {
       toast('Failed to add applicant', 'error');
     }
@@ -110,8 +156,7 @@ export default function Recruitment() {
     try {
       await recruitmentAPI.updateApplicant(id, { status });
       toast('Status updated', 'success');
-      const data = await recruitmentAPI.getApplicants(selectedJob.id);
-      setApplicants(data || []);
+      viewApplicants(selectedJob, appPage);
     } catch (err) {
       toast('Failed to update status', 'error');
     }
@@ -119,7 +164,7 @@ export default function Recruitment() {
 
   const getDeptName = (id) => {
     const dept = departments.find(d => d.id === id);
-    return dept ? dept.name : id;
+    return dept ? dept.name : id || '—';
   };
 
   const jobCols = [
@@ -148,14 +193,14 @@ export default function Recruitment() {
       key: 'status', 
       label: 'Status',
       render: (j) => {
-        const variants = { 'open': 'success', 'closed': 'danger', 'paused': 'warning' };
-        return <Badge variant={variants[j.status?.toLowerCase()] || 'neutral'}>{j.status}</Badge>;
+        const variants = { 'OPEN': 'success', 'CLOSED': 'danger', 'PAUSED': 'warning' };
+        return <Badge variant={variants[j.status] || 'neutral'}>{j.status}</Badge>;
       }
     },
     { 
       key: 'closing_date', 
       label: 'Closing Date',
-      render: (j) => new Date(j.closing_date).toLocaleDateString()
+      render: (j) => j.closing_date ? new Date(j.closing_date).toLocaleDateString() : '—'
     },
     {
       key: 'actions',
@@ -167,6 +212,9 @@ export default function Recruitment() {
       )
     }
   ];
+
+  const totalPages  = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const appTotalPages = Math.max(1, Math.ceil(appTotal / 20));
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
@@ -182,13 +230,56 @@ export default function Recruitment() {
         }
       />
 
+      {/* Fixed: search bar with debounce — prevents API hammering on every keystroke */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>
+        <div style={{ position: 'relative', flex: 1, maxWidth: 400 }}>
+          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
+          <input
+            style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, border: '1px solid var(--border-color)', fontSize: 13, fontFamily: 'var(--font-body)', background: 'var(--white)', color: 'var(--text-dark)', outline: 'none' }}
+            placeholder="Search job titles… (debounced)"
+            onChange={handleSearchChange}
+          />
+        </div>
+        {total > 0 && (
+          <span style={{ fontSize: 13, color: 'var(--gray-500)', display: 'flex', alignItems: 'center' }}>
+            {total} job{total !== 1 ? 's' : ''} total
+          </span>
+        )}
+      </div>
+
       <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <Table 
-          cols={jobCols} 
-          rows={jobs} 
-          loading={loading} 
-          emptyMsg="No active job postings."
-        />
+        {/* Fixed: overlay spinner keeps old data visible instead of full table flicker */}
+        <div style={{ position: 'relative' }}>
+          {loading && jobs.length > 0 && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+              <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>Loading…</span>
+            </div>
+          )}
+          <Table 
+            cols={jobCols} 
+            rows={jobs} 
+            loading={loading && jobs.length === 0} 
+            emptyMsg="No active job postings."
+          />
+        </div>
+
+        {/* Fixed for 1M+ rows: pagination controls */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--gray-200)', fontSize: 13 }}>
+            <span style={{ color: 'var(--gray-500)' }}>
+              Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+              {total > 0 && <> &nbsp;({total} total)</>}
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <Btn variant="secondary" size="xs" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+                <ChevronLeft size={13} /> Prev
+              </Btn>
+              <Btn variant="secondary" size="xs" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
+                Next <ChevronRight size={13} />
+              </Btn>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* JOB CREATION MODAL */}
@@ -209,9 +300,6 @@ export default function Recruitment() {
             >
               <option value="">Select Department</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              {/* Fallback option if departments API fails/empty */}
-              {departments.length === 0 && <option value="IT">IT</option>}
-              {departments.length === 0 && <option value="HR">HR</option>}
             </Select>
             <Select 
               label="Employment Type" 
@@ -245,12 +333,15 @@ export default function Recruitment() {
         </form>
       </Modal>
 
-      {/* APPLICANTS MODAL */}
+      {/* APPLICANTS MODAL — Fixed: paginated per job */}
       <Modal open={applicantModalOpen} onClose={() => setApplicantModalOpen(false)} title="Manage Applicants" width={700}>
         {selectedJob && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-dark)' }}>{selectedJob.title} Applicants</h3>
+              <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-dark)' }}>
+                {selectedJob.title} Applicants
+                {appTotal > 0 && <span style={{ fontSize: 13, color: 'var(--gray-500)', fontWeight: 400, marginLeft: 8 }}>({appTotal} total)</span>}
+              </h3>
               <Btn size="sm" variant="outline" onClick={() => setShowAddApplicant(!showAddApplicant)}>
                 {showAddApplicant ? 'Cancel' : 'Add Applicant'}
               </Btn>
@@ -275,7 +366,17 @@ export default function Recruitment() {
 
             <div style={{ marginTop: 24 }}>
               {loadingApplicants ? (
-                <p>Loading applicants...</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {[1, 2].map((i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, border: '1px solid var(--border-color)', borderRadius: 8 }}>
+                      <div>
+                        <Skeleton width="120px" height="16px" style={{ marginBottom: 6 }} />
+                        <Skeleton width="180px" height="12px" />
+                      </div>
+                      <Skeleton width="80px" height="24px" />
+                    </div>
+                  ))}
+                </div>
               ) : applicants.length === 0 ? (
                 <p style={{ color: 'var(--gray-500)', fontStyle: 'italic' }}>No applicants yet.</p>
               ) : (
@@ -287,24 +388,39 @@ export default function Recruitment() {
                         <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{app.email} {app.phone ? `• ${app.phone}` : ''}</div>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <Badge variant={app.status === 'hired' ? 'success' : app.status === 'rejected' ? 'danger' : 'neutral'}>
-                          {app.status || 'applied'}
+                        <Badge variant={app.status === 'HIRED' ? 'success' : app.status === 'REJECTED' ? 'danger' : 'neutral'}>
+                          {app.status || 'APPLIED'}
                         </Badge>
                         <Select 
-                          value={app.status || 'applied'}
+                          value={app.status || 'APPLIED'}
                           onChange={(e) => updateApplicantStatus(app.id, e.target.value)}
                           style={{ width: 120, padding: '4px 8px', marginBottom: 0 }}
                         >
-                          <option value="applied">Applied</option>
-                          <option value="screening">Screening</option>
-                          <option value="interview">Interview</option>
-                          <option value="offered">Offered</option>
-                          <option value="hired">Hired</option>
-                          <option value="rejected">Rejected</option>
+                          <option value="APPLIED">Applied</option>
+                          <option value="SCREENING">Screening</option>
+                          <option value="INTERVIEW">Interview</option>
+                          <option value="OFFERED">Offered</option>
+                          <option value="HIRED">Hired</option>
+                          <option value="REJECTED">Rejected</option>
                         </Select>
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Fixed for 1M+ rows: applicant pagination */}
+              {appTotalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+                  <Btn variant="secondary" size="xs" disabled={appPage <= 1} onClick={() => viewApplicants(selectedJob, appPage - 1)}>
+                    <ChevronLeft size={13} /> Prev
+                  </Btn>
+                  <span style={{ fontSize: 13, color: 'var(--gray-500)', display: 'flex', alignItems: 'center' }}>
+                    {appPage} / {appTotalPages}
+                  </span>
+                  <Btn variant="secondary" size="xs" disabled={appPage >= appTotalPages} onClick={() => viewApplicants(selectedJob, appPage + 1)}>
+                    Next <ChevronRight size={13} />
+                  </Btn>
                 </div>
               )}
             </div>

@@ -30,7 +30,7 @@ async def employee_count_by_dept_role(db: AsyncSession) -> list[dict]:
             func.count(User.id).label("count"),
         )
         .outerjoin(Department, User.department_id == Department.id)
-        .where(User.status == "active")
+        .where(User.status == "ACTIVE")  # enum fix
         .group_by(Department.name, User.role)
         .order_by(Department.name, User.role)
     )
@@ -48,10 +48,10 @@ async def leave_stats(db: AsyncSession) -> dict:
     all_leaves = result.scalars().all()
     return {
         "total": len(all_leaves),
-        "pending": sum(1 for l in all_leaves if l.status == "pending"),
-        "approved": sum(1 for l in all_leaves if l.status == "approved"),
-        "rejected": sum(1 for l in all_leaves if l.status == "rejected"),
-        "cancelled": sum(1 for l in all_leaves if l.status == "cancelled"),
+        "pending": sum(1 for l in all_leaves if l.status == "PENDING"),  # enum fix
+        "approved": sum(1 for l in all_leaves if l.status == "APPROVED"),  # enum fix
+        "rejected": sum(1 for l in all_leaves if l.status == "REJECTED"),  # enum fix
+        "cancelled": sum(1 for l in all_leaves if l.status == "CANCELLED"),  # enum fix
     }
 
 
@@ -63,7 +63,7 @@ async def attendance_summary(db: AsyncSession, month: int, year: int) -> list[di
             User.id,
             User.first_name,
             User.last_name,
-            func.count(Attendance.id).filter(Attendance.status == "present").label("days_present"),
+            func.count(Attendance.id).filter(Attendance.status == "PRESENT").label("days_present"),  # enum fix
             func.count(Attendance.id).filter(Attendance.is_late == True).label("days_late"),
             func.coalesce(func.sum(Attendance.total_hours), 0).label("total_hours"),
         )
@@ -73,7 +73,7 @@ async def attendance_summary(db: AsyncSession, month: int, year: int) -> list[di
             (extract("month", Attendance.date) == month) &
             (extract("year", Attendance.date) == year)
         )
-        .where(User.status == "active")
+        .where(User.status == "ACTIVE")  # enum fix
         .group_by(User.id, User.first_name, User.last_name)
         .order_by(User.first_name)
     )
@@ -146,7 +146,7 @@ async def attendance_weekly(db: AsyncSession) -> list[dict]:
         day = start_of_week + datetime.timedelta(days=i)
         result = await db.execute(
             select(
-                func.count(Attendance.id).filter(Attendance.status == "present").label("present"),
+                func.count(Attendance.id).filter(Attendance.status == "PRESENT").label("present"),  # enum fix
                 func.count(Attendance.id).filter(Attendance.is_late == True).label("late"),
             ).where(Attendance.date == day)
         )
@@ -179,7 +179,7 @@ async def onboarding_report(db: AsyncSession) -> dict:
     ]
     return {
         "total": len(rows),
-        "in_progress": sum(1 for r, _ in rows if r.status == "in_progress"),
-        "completed": sum(1 for r, _ in rows if r.status == "completed"),
+        "in_progress": sum(1 for r, _ in rows if r.status == "IN_PROGRESS"),  # enum fix
+        "completed": sum(1 for r, _ in rows if r.status == "COMPLETED"),  # enum fix
         "details": details,
     }

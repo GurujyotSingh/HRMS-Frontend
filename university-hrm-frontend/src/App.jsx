@@ -1,10 +1,10 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuth } from './context/AuthContext';
 import { ToastContainer } from './components/ui';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
-
 import Login from './pages/Login';
 import Dashboard from './components/Dashboard';
 import Employees from './pages/Employees';
@@ -19,6 +19,20 @@ import AuditLogs from './pages/AuditLogs';
 import Reports from './pages/Reports';
 import Recruitment from './pages/Recruitment';
 import Announcements from './pages/Announcements';
+
+// Fixed for 1M+ rows scalability: React Query global client
+// staleTime: 60s means cached data is reused for 60s before a background refetch
+// retry: 1 means failed queries retry once before showing an error
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,      // 60 seconds — prevents hammering DB on tab-switch
+      cacheTime: 5 * 60 * 1000, // 5 minutes — keep unused cache in memory
+      retry: 1,
+      refetchOnWindowFocus: false, // don't re-fetch on every tab focus
+    },
+  },
+});
 
 // Redirect if already logged in
 function LoginRoute({ children }) {
@@ -35,7 +49,7 @@ const ADMIN_ONLY   = ['admin'];
 
 export default function App() {
   return (
-    <>
+    <QueryClientProvider client={queryClient}>
       <ToastContainer />
       <Routes>
         {/* ── Public ─────────────────────────────────────────── */}
@@ -174,6 +188,6 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </>
+    </QueryClientProvider>
   );
 }

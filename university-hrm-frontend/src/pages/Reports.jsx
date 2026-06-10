@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { PageHeader, Card, Table, Tabs, Btn, Modal, toast } from '../components/ui';
+import { PageHeader, Card, Tabs, Btn, Modal, toast, Skeleton } from '../components/ui';
 import { reportsAPI, aiAgentsAPI } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -74,7 +74,7 @@ export default function Reports() {
         
         <div style={{ padding: 24, minHeight: 400 }}>
           {loading ? (
-            <div>Loading insights...</div>
+            <Skeleton height="350px" variant="rectangular" />
           ) : (
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={data}>

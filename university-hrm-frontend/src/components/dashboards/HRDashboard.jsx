@@ -3,7 +3,7 @@ import { Users, BookOpen, Briefcase, Key } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 import { reportsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Card, Spinner } from '../../components/ui';
+import { Card, Spinner, Skeleton } from '../../components/ui';
 
 export default function HRDashboard() {
   const { hasRole, user } = useAuth();
@@ -80,23 +80,25 @@ export default function HRDashboard() {
                 <div className={`stat-icon ${stat.colorClass || 'purple'}`}>
                   {stat.icon}
                 </div>
-                <div className="stat-info">
-                  <div className="stat-value">{stat.value}</div>
+                <div className="stat-info" style={{ flexGrow: 1 }}>
+                  <div className="stat-value" style={{ minHeight: 34 }}>
+                    {loading ? <Skeleton width="60px" height="28px" /> : stat.value}
+                  </div>
                   <div className="stat-label">{stat.label}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner /></div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginTop: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginTop: '24px' }}>
 
-              {/* Chart 1: Department Distribution */}
-              <Card style={{ padding: '24px' }}>
-                <h3 style={{ fontSize: 16, marginBottom: 20 }}>Employee Distribution by Department</h3>
-                <div style={{ height: 300 }}>
+            {/* Chart 1: Department Distribution */}
+            <Card style={{ padding: '24px' }}>
+              <h3 style={{ fontSize: 16, marginBottom: 20 }}>Employee Distribution by Department</h3>
+              <div style={{ height: 300 }}>
+                {loading ? (
+                  <Skeleton height="100%" variant="rectangular" />
+                ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats || []}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--gray-200)" />
@@ -106,13 +108,17 @@ export default function HRDashboard() {
                       <Bar dataKey="employee_count" name="Employees" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
-              </Card>
+                )}
+              </div>
+            </Card>
 
-              {/* Chart 2: Weekly Attendance Trend */}
-              <Card style={{ padding: '24px' }}>
-                <h3 style={{ fontSize: 16, marginBottom: 20 }}>Weekly Attendance Trends</h3>
-                <div style={{ height: 300 }}>
+            {/* Chart 2: Weekly Attendance Trend */}
+            <Card style={{ padding: '24px' }}>
+              <h3 style={{ fontSize: 16, marginBottom: 20 }}>Weekly Attendance Trends</h3>
+              <div style={{ height: 300 }}>
+                {loading ? (
+                  <Skeleton height="100%" variant="rectangular" />
+                ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={attendance || []}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--gray-200)" />
@@ -123,10 +129,10 @@ export default function HRDashboard() {
                       <Line type="monotone" dataKey="absent_count" name="Absent" stroke="var(--danger)" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                     </LineChart>
                   </ResponsiveContainer>
-                </div>
-              </Card>
-            </div>
-          )}
+                )}
+              </div>
+            </Card>
+          </div>
         </>
       )}
 

@@ -544,12 +544,74 @@ export function Modal({ open, onClose, title, children, width = 500 }) {
    TABLE
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export function Table({ cols, rows, loading, emptyMsg = 'No data found' }) {
+export function Table({ 
+  cols, 
+  rows, 
+  loading, 
+  emptyMsg = 'No data found',
+  selectable = false,
+  selectedRows = [],
+  onSelectionChange = () => {},
+  sortColumn = null,
+  sortDirection = 'asc',
+  onSort = () => {}
+}) {
   if (loading) {
+    const fakeRows = Array.from({ length: 5 });
     return (
-      <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spinner size={28} />
-        <p style={{ marginTop: 12, color: 'var(--gray-500)', fontSize: 13 }}>Loading data...</p>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: 'var(--gray-100)' }}>
+              {selectable && (
+                <th style={{ width: 40, padding: '10px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                  <input type="checkbox" disabled style={{ cursor: 'not-allowed', opacity: 0.3 }} />
+                </th>
+              )}
+              {cols.map((c) => (
+                <th
+                  key={c.key}
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px 16px',
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    fontWeight: 600,
+                    color: 'var(--gray-500)',
+                    borderBottom: '1px solid var(--border-color)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {fakeRows.map((_, i) => (
+              <tr key={i} style={{ background: 'var(--white)' }}>
+                {selectable && (
+                  <td style={{ padding: '10px 16px', borderBottom: '1px solid var(--gray-200)', verticalAlign: 'middle' }}>
+                    <Skeleton width="16px" height="16px" />
+                  </td>
+                )}
+                {cols.map((c, j) => (
+                  <td
+                    key={c.key}
+                    style={{
+                      padding: '10px 16px',
+                      borderBottom: '1px solid var(--gray-200)',
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    <Skeleton width={j === 0 ? "100px" : j === 1 ? "140px" : "80px"} height="16px" />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   }
@@ -569,14 +631,44 @@ export function Table({ cols, rows, loading, emptyMsg = 'No data found' }) {
       </div>
     );
   }
+
+  const allSelected = rows.length > 0 && selectedRows.length === rows.length;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(rows.map(r => r.id));
+    }
+  };
+
+  const toggleRow = (id) => {
+    if (selectedRows.includes(id)) {
+      onSelectionChange(selectedRows.filter(rId => rId !== id));
+    } else {
+      onSelectionChange([...selectedRows, id]);
+    }
+  };
+
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ background: 'var(--gray-100)' }}>
+            {selectable && (
+              <th style={{ width: 40, padding: '10px 16px', borderBottom: '1px solid var(--border-color)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={allSelected} 
+                  onChange={toggleAll}
+                  style={{ cursor: 'pointer' }}
+                />
+              </th>
+            )}
             {cols.map((c) => (
               <th
                 key={c.key}
+                onClick={() => c.sortable !== false && onSort(c.key)}
                 style={{
                   textAlign: 'left',
                   padding: '10px 16px',
@@ -587,40 +679,66 @@ export function Table({ cols, rows, loading, emptyMsg = 'No data found' }) {
                   color: 'var(--gray-500)',
                   borderBottom: '1px solid var(--border-color)',
                   whiteSpace: 'nowrap',
+                  cursor: c.sortable !== false ? 'pointer' : 'default',
+                  userSelect: 'none'
                 }}
               >
-                {c.label}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {c.label}
+                  {c.sortable !== false && sortColumn === c.key && (
+                    <span style={{ fontSize: 14, color: 'var(--primary)' }}>
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                  )}
+                </div>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr
-              key={row.key ?? row.id ?? i}
-              style={{
-                background: 'var(--white)',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--gray-100)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--white)')}
-            >
-              {cols.map((c) => (
-                <td
-                  key={c.key}
-                  style={{
-                    padding: '10px 16px',
-                    borderBottom: '1px solid var(--gray-200)',
-                    verticalAlign: 'middle',
-                    color: 'var(--text-dark)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {c.render ? c.render(row) : row[c.key]}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row, i) => {
+            const isSelected = selectedRows.includes(row.id);
+            return (
+              <tr
+                key={row.key ?? row.id ?? i}
+                style={{
+                  background: isSelected ? 'rgba(30, 23, 96, 0.04)' : 'var(--white)',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) e.currentTarget.style.background = 'var(--gray-100)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) e.currentTarget.style.background = 'var(--white)';
+                }}
+              >
+                {selectable && (
+                  <td style={{ padding: '10px 16px', borderBottom: '1px solid var(--gray-200)', verticalAlign: 'middle' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={isSelected}
+                      onChange={() => toggleRow(row.id)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </td>
+                )}
+                {cols.map((c) => (
+                  <td
+                    key={c.key}
+                    style={{
+                      padding: '10px 16px',
+                      borderBottom: '1px solid var(--gray-200)',
+                      verticalAlign: 'middle',
+                      color: 'var(--text-dark)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {c.render ? c.render(row) : row[c.key]}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -823,3 +941,118 @@ export function EmptyState({ icon = '📋', title = 'No data', message }) {
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGINATION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export function Pagination({
+  totalCount,
+  pageSize,
+  currentPage,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [25, 50, 100],
+}) {
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  const startRow = (currentPage - 1) * pageSize + 1;
+  const endRow = Math.min(currentPage * pageSize, totalCount);
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '16px 24px',
+      borderTop: '1px solid var(--border-color)',
+      background: 'var(--white)',
+      fontSize: 13,
+      flexWrap: 'wrap',
+      gap: 16
+    }}>
+      <div style={{ color: 'var(--gray-500)' }}>
+        Showing <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{totalCount === 0 ? 0 : startRow}-{endRow}</span> of <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{totalCount}</span> records
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: 'var(--gray-500)' }}>Rows per page:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid var(--border-color)',
+              borderRadius: 6,
+              background: 'var(--white)',
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            {pageSizeOptions.map(size => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid var(--border-color)',
+              background: currentPage === 1 ? 'var(--gray-100)' : 'var(--white)',
+              color: currentPage === 1 ? 'var(--gray-400)' : 'var(--text-dark)',
+              borderRadius: 6,
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Prev
+          </button>
+          
+          <span style={{ margin: '0 8px', color: 'var(--gray-500)' }}>
+            Page <strong style={{ color: 'var(--text-dark)' }}>{currentPage}</strong> of {totalPages}
+          </span>
+          
+          <button
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid var(--border-color)',
+              background: currentPage >= totalPages ? 'var(--gray-100)' : 'var(--white)',
+              color: currentPage >= totalPages ? 'var(--gray-400)' : 'var(--text-dark)',
+              borderRadius: 6,
+              cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SKELETON SHIMMER LOADER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export function Skeleton({ width = '100%', height = '16px', variant = 'text', style = {}, className = '' }) {
+  const borderRadius = variant === 'circular' ? '50%' : variant === 'text' ? '6px' : '10px';
+  
+  return (
+    <div
+      className={`skeleton-box ${className}`}
+      style={{
+        width,
+        height,
+        borderRadius,
+        display: 'inline-block',
+        ...style
+      }}
+    />
+  );
+}
+

@@ -59,8 +59,8 @@ class OffboardingRecord(Base):
     initiated_by_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_working_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String, default="in_progress", nullable=False)
-    clearance_status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
+    status: Mapped[str] = mapped_column(String, default="IN_PROGRESS", nullable=False)
+    clearance_status: Mapped[str] = mapped_column(String, default="PENDING", nullable=False)
     initiated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
