@@ -144,8 +144,10 @@ async def get_own_attendance(
 
 async def get_all_attendance_today(db: AsyncSession) -> list[Attendance]:
     """HR: all check-ins for today."""
+    from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(Attendance)
+        .options(selectinload(Attendance.employee))
         .where(Attendance.date == _today())
         .order_by(Attendance.employee_id)
     )
@@ -157,9 +159,33 @@ async def update_attendance_by_hr(db: AsyncSession, attendance_id: str, updates:
     att = result.scalar_one_or_none()
     if not att:
         raise ValueError("Attendance record not found")
+        
+    # Validation: Ensure check_in and check_out are on the same date as the attendance record
+    if "check_in" in updates and updates["check_in"]:
+        in_time = updates["check_in"]
+        local_date = in_time.astimezone(TZ).date() if in_time.tzinfo else in_time.date()
+        if local_date != att.date:
+            raise ValueError(f"Clock In date ({local_date}) must match the attendance record date ({att.date}).")
+            
+    if "check_out" in updates and updates["check_out"]:
+        out_time = updates["check_out"]
+        local_date = out_time.astimezone(TZ).date() if out_time.tzinfo else out_time.date()
+        if local_date != att.date:
+            raise ValueError(f"Clock Out date ({local_date}) must match the attendance record date ({att.date}).")
+
     for k, v in updates.items():
         if hasattr(att, k) and v is not None:
             setattr(att, k, v)
+            
+    # Validation: Ensure check_out is after check_in
+    if att.check_in and att.check_out:
+        if att.check_out <= att.check_in:
+            raise ValueError("Clock Out time must be after Clock In time.")
+            
+    # Recalculate hours
+    if att.check_in and att.check_out:
+        att.total_hours = _calculate_hours(att.check_in, att.check_out)
+        
     att.updated_at = _now()
     await db.commit()
     await db.refresh(att)

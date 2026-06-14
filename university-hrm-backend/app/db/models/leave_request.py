@@ -18,7 +18,7 @@ class LeaveRequest(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     employee_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    leave_type: Mapped[Optional[str]] = mapped_column(ENUM('ANNUAL', 'SICK', 'CASUAL', 'MATERNITY', 'PATERNITY', 'UNPAID', 'COMPENSATORY', name='LeaveType', create_type=False), nullable=True)  # casual | sick | earned | unpaid
+    leave_type: Mapped[Optional[str]] = mapped_column(ENUM('ANNUAL', 'SICK', 'CASUAL', 'MATERNITY', 'PATERNITY', 'UNPAID', 'COMPENSATORY', 'SABBATICAL', 'EXAM_DUTY', name='LeaveType', create_type=False), nullable=True)  # casual | sick | earned | unpaid
     from_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     to_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     total_days: Mapped[int] = mapped_column(Integer, nullable=False)

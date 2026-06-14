@@ -44,40 +44,13 @@ class User(Base):
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     skills: Mapped[Optional[list]] = mapped_column(ARRAY(String), nullable=True)
 
-    # Employment
-    role: Mapped[Optional[str]] = mapped_column(ENUM('SUPER_ADMIN', 'DIRECTOR', 'HR_MANAGER', 'HR_STAFF', 'FACULTY', 'STAFF', name='SystemRole', create_type=False), nullable=True)
-    designation: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    department_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("departments.id"), nullable=True)
-    employment_type: Mapped[Optional[str]] = mapped_column(ENUM('FULL_TIME', 'PART_TIME', 'CONTRACT', 'VISITING', name='EmploymentType', create_type=False), nullable=True)
-    salary: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    join_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    exit_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Employment & References (Moved to UserEmployment)
+    role: Mapped[Optional[str]] = mapped_column(ENUM('SUPER_ADMIN', 'DIRECTOR', 'HR_MANAGER', 'HR_STAFF', 'FACULTY', 'STAFF', 'ACCOUNTANT', name='SystemRole', create_type=False), nullable=True)
     status: Mapped[Optional[str]] = mapped_column(ENUM('ACTIVE', 'INACTIVE', 'SUSPENDED', 'ON_LEAVE', name='EmployeeStatus', create_type=False), nullable=True)
-
-    # Address
-    street: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    city: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    state: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    country: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    pincode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    campus: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    # Emergency Contact
-    emergency_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    emergency_relation: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    emergency_phone: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    emergency_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    # References
-    reporting_manager_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
-    position_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    # Statutory & Financial
-    pan_number: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    uan_number: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    bank_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    bank_account_number: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    ifsc_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    
+    # Address (Moved to UserAddress)
+    # Emergency Contact (Moved to UserEmergencyContact)
+    # Statutory & Financial (Moved to UserFinancial)
 
     # Preferences
     preferences: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
@@ -94,6 +67,10 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Relationships
-    department: Mapped[Optional["Department"]] = relationship("Department", foreign_keys=[department_id], lazy="selectin")
-    reporting_manager: Mapped[Optional["User"]] = relationship("User", remote_side="User.id", foreign_keys=[reporting_manager_id], lazy="selectin")
     notifications: Mapped[list["Notification"]] = relationship("Notification", back_populates="user", lazy="selectin")
+    
+    # BCNF Normalized Relationships
+    address: Mapped[Optional["UserAddress"]] = relationship("UserAddress", back_populates="user", uselist=False, lazy="selectin", cascade="all, delete-orphan")
+    financials: Mapped[Optional["UserFinancial"]] = relationship("UserFinancial", back_populates="user", uselist=False, lazy="selectin", cascade="all, delete-orphan")
+    employment: Mapped[Optional["UserEmployment"]] = relationship("UserEmployment", back_populates="user", foreign_keys="[UserEmployment.user_id]", uselist=False, lazy="selectin", cascade="all, delete-orphan")
+    emergency_contacts: Mapped[list["UserEmergencyContact"]] = relationship("UserEmergencyContact", back_populates="user", lazy="selectin", cascade="all, delete-orphan")

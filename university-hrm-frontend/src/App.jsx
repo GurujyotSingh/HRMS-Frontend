@@ -20,6 +20,10 @@ import Reports from './pages/Reports';
 import Recruitment from './pages/Recruitment';
 import Announcements from './pages/Announcements';
 
+import PublicLayout from './components/layout/PublicLayout';
+import Careers from './pages/Careers';
+import JobApply from './pages/JobApply';
+
 // Fixed for 1M+ rows scalability: React Query global client
 // staleTime: 60s means cached data is reused for 60s before a background refetch
 // retry: 1 means failed queries retry once before showing an error
@@ -52,6 +56,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ToastContainer />
       <Routes>
+        <Route path="/careers" element={<PublicLayout><Careers /></PublicLayout>} />
+        <Route path="/careers/:id" element={<PublicLayout><JobApply /></PublicLayout>} />
+
         {/* ── Public ─────────────────────────────────────────── */}
         <Route
           path="/login"

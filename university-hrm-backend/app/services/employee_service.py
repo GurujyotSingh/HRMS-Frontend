@@ -10,6 +10,10 @@ from sqlalchemy.orm import selectinload
 from typing import Optional, Tuple
 
 from app.db.models.user import User
+from app.db.models.address import UserAddress, PostalCode
+from app.db.models.financial import UserFinancial, BankBranch
+from app.db.models.employment import UserEmployment
+from app.db.models.emergency_contact import UserEmergencyContact
 from app.db.models.department import Department
 from app.core.security import get_password_hash
 from app.services.email_service import send_credentials_email
@@ -32,10 +36,14 @@ async def get_employees(
     """Get all employees (users) with pagination, sorting, and filters."""
     
     # Base query for filtering
-    base_query = select(User)
+    base_query = select(User).options(
+        selectinload(User.employment),
+        selectinload(User.address),
+        selectinload(User.financials).selectinload(UserFinancial.bank_branch),
+    )
     
     if department_id:
-        base_query = base_query.where(User.department_id == department_id)
+        base_query = base_query.join(User.employment).where(UserEmployment.department_id == department_id)
     if status:
         base_query = base_query.where(User.status == status)
     if role:
@@ -117,18 +125,31 @@ async def create_employee(db: AsyncSession, data: dict) -> User:
         status="ACTIVE",
         needs_password_change=True,
         failed_login_attempts=0,
-        join_date=data.get("join_date"),
-        department_id=data.get("department_id"),
-        designation=data.get("designation"),
-        employment_type=data.get("employment_type"),
-        pan_number=data.get("pan_number"),
-        uan_number=data.get("uan_number"),
-        bank_name=data.get("bank_name"),
-        bank_account_number=data.get("bank_account_number"),
-        ifsc_code=data.get("ifsc_code"),
         created_at=now,
         updated_at=now,
     )
+    
+    if data.get("address"):
+        addr = data["address"]
+        user.address = UserAddress(street=addr.get("street"), campus=addr.get("campus"), pincode=addr.get("pincode"))
+        
+    if data.get("financials"):
+        fin = data["financials"]
+        if fin.get("ifsc_code"):
+            from app.db.models.financial import BankBranch
+            existing_bank = await db.scalar(select(BankBranch).where(BankBranch.ifsc_code == fin["ifsc_code"]))
+            if not existing_bank:
+                db.add(BankBranch(ifsc_code=fin["ifsc_code"], bank_name=fin.get("bank_name") or "Unknown Bank"))
+                await db.flush()
+        user.financials = UserFinancial(pan_number=fin.get("pan_number"), uan_number=fin.get("uan_number"), bank_account_number=fin.get("bank_account_number"), ifsc_code=fin.get("ifsc_code"))
+        
+    if data.get("employment"):
+        emp = data["employment"]
+        user.employment = UserEmployment(department_id=emp.get("department_id"), designation=emp.get("designation"), staff_category=emp.get("staff_category"), employment_type=emp.get("employment_type"), salary=emp.get("salary"), join_date=emp.get("join_date"), exit_date=emp.get("exit_date"), reporting_manager_id=emp.get("reporting_manager_id"), position_id=emp.get("position_id"))
+        
+    if data.get("emergency_contacts"):
+        user.emergency_contacts = [UserEmergencyContact(id=str(uuid.uuid4()), name=c["name"], relation=c["relation"], phone=c["phone"], email=c.get("email")) for c in data["emergency_contacts"]]
+        
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -157,8 +178,42 @@ async def get_employee_by_employee_id(db: AsyncSession, employee_id: str) -> Opt
 async def update_employee(db: AsyncSession, user: User, update_data: dict) -> User:
     """Update an employee's profile fields."""
     for field, value in update_data.items():
+        if field in ["address", "financials", "employment", "emergency_contacts"]:
+            continue
         if hasattr(user, field):
             setattr(user, field, value)
+            
+    if "address" in update_data and update_data["address"]:
+        if not user.address:
+            user.address = UserAddress(user_id=user.id)
+        for k, v in update_data["address"].items():
+            setattr(user.address, k, v)
+            
+    if "financials" in update_data and update_data["financials"]:
+        fin = update_data["financials"]
+        if fin.get("ifsc_code"):
+            from app.db.models.financial import BankBranch
+            existing_bank = await db.scalar(select(BankBranch).where(BankBranch.ifsc_code == fin["ifsc_code"]))
+            if not existing_bank:
+                db.add(BankBranch(ifsc_code=fin["ifsc_code"], bank_name=fin.get("bank_name") or "Unknown Bank"))
+                await db.flush()
+        if not user.financials:
+            user.financials = UserFinancial(user_id=user.id)
+        for k, v in fin.items():
+            if k != "bank_name": # bank_name is for BankBranch, not UserFinancial
+                setattr(user.financials, k, v)
+            
+    if "employment" in update_data and update_data["employment"]:
+        if not user.employment:
+            user.employment = UserEmployment(user_id=user.id)
+        for k, v in update_data["employment"].items():
+            setattr(user.employment, k, v)
+            
+    if "emergency_contacts" in update_data and update_data["emergency_contacts"] is not None:
+        user.emergency_contacts = []
+        for c in update_data["emergency_contacts"]:
+            user.emergency_contacts.append(UserEmergencyContact(id=str(uuid.uuid4()), user_id=user.id, name=c["name"], relation=c["relation"], phone=c["phone"], email=c.get("email")))
+
     user.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)

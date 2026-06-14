@@ -14,6 +14,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.db.models.user import User
 from app.services.auth_service import register_user, authenticate_user
+from app.api.v1.employees import EmployeeOut
 from app.core.security import create_access_token
 from app.core.rate_limit import limiter
 
@@ -38,6 +39,11 @@ class RegisterRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class UserMeResponse(BaseModel):
@@ -87,6 +93,11 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is not active",
         )
+        
+    from datetime import datetime, timezone
+    user.last_login = datetime.now(timezone.utc)
+    await db.commit()
+    
     access_token = create_access_token(subject=user.id)
     
     from datetime import timedelta
@@ -117,7 +128,7 @@ async def register(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/me", response_model=UserMeResponse)
+@router.get("/me", response_model=EmployeeOut)
 async def get_me(current_user: User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
     return current_user
@@ -128,6 +139,28 @@ async def logout(response: Response):
     """Logout (client-side: clear the token)."""
     response.delete_cookie("refresh_token")
     return {"msg": "Logged out successfully"}
+
+
+@router.put("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Allow user to change their own password."""
+    from app.core.security import verify_password, get_password_hash
+    
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password"
+        )
+        
+    current_user.password_hash = get_password_hash(body.new_password)
+    current_user.needs_password_change = False
+    
+    await db.commit()
+    return {"msg": "Password updated successfully"}
 
 
 @router.post("/refresh", response_model=TokenResponse)

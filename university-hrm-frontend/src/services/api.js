@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // ─── FastAPI backend base URL ─────────────────────────────────────────────────
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+const BASE_URL = process.env.REACT_APP_API_URL || `http://${window.location.hostname}:8000/api/v1`;
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -115,17 +115,14 @@ function unwrap(promise) {
    AUTH  — FastAPI prefix: /auth
 ══════════════════════════════════════════════════════════════════════════*/
 export const authAPI = {
-  login: (email, password) =>
-    api.post('/auth/login', { email, password }),
-  refresh: () => api.post('/auth/refresh'),
+  login: (email, password, rememberMe = false) => api.post('/auth/login', { email, password, rememberMe }),
   logout: () => api.post('/auth/logout'),
   me: () => unwrap(api.get('/auth/me')),
+  refresh: () => api.post('/auth/refresh'),
   register: (data) => api.post('/auth/register', data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
-  resetPassword: (token, newPassword) =>
-    api.post('/auth/reset-password', { token, newPassword }),
-  changePassword: (currentPassword, newPassword) =>
-    api.post('/auth/change-password', { currentPassword, newPassword }),
+  resetPassword: (token, newPassword) => api.post('/auth/reset-password', { token, newPassword }),
+  changePassword: (data) => unwrap(api.put('/auth/change-password', data))
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -223,7 +220,7 @@ export const attendanceAPI = {
     unwrap(api.get(`/attendance/calendar/${empId}`, { params: { month, year } })),
   summary: (empId, month, year) =>
     unwrap(api.get(`/attendance/summary/${empId}`, { params: { month, year } })),
-  correct: (id, data) => unwrap(api.patch(`/attendance/${id}`, data)),
+  correct: (id, data) => unwrap(api.patch(`/attendance/hr/${id}`, data)),
   autoClockOut: () => unwrap(api.post('/attendance/auto-clock-out')),
 
   // Fixed: HR view is now always paginated — pass { page, limit, date } etc.
@@ -398,11 +395,11 @@ export const aiAgentsAPI = {
   // Fixed for 1M+ rows: send only IDs/minimal data, not entire objects
   explainPayslip: (payslipId) => chatAPI.explainPayslip(payslipId),
   recommendLeave: (data) =>
-    unwrap(api.post('/ai/chat', { message: `Recommend leave for: ${JSON.stringify(data)}` })),
+    unwrap(api.post('/ai/recommend-leave', data)),
   suggestGoals: (data) =>
-    unwrap(api.post('/ai/chat', { message: `Suggest performance goals for: ${JSON.stringify(data)}` })),
+    unwrap(api.post('/ai/suggest-goals', data)),
   summarizeReport: (data) =>
-    unwrap(api.post('/ai/chat', { message: `Summarize this report: ${JSON.stringify(data)}` })),
+    unwrap(api.post('/ai/summarize-report', data)),
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -436,4 +433,18 @@ export const perfAPI = {
   hodReview: (id, d) => perfAPI.directorReview(id, d),
 };
 
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PUBLIC CAREERS — FastAPI prefix: /public/careers
+══════════════════════════════════════════════════════════════════════════*/
+export const publicCareersAPI = {
+  getJobs: async () => (await unwrap(axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/public/careers/jobs`, { params: { _t: Date.now() } }))).data,
+  getJob: async (id) => (await unwrap(axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/public/careers/jobs/${id}`, { params: { _t: Date.now() } }))).data,
+  apply: async (id, formData) => (await unwrap(axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/public/careers/jobs/${id}/apply`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }))).data
+};
+
 export default api;
+

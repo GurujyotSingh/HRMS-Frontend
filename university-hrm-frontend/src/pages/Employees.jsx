@@ -86,15 +86,15 @@ export default function Employees() {
   const [limit, setLimit] = useState(50);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebounced] = useState('');
-  const [filters, setFilters] = useState({ department_id: '', status: '', role: '', employment_type: '' });
-  const [draftFilters, setDraftFilters] = useState({ department_id: '', status: '', role: '', employment_type: '' });
+  const [filters, setFilters] = useState({ department_id: '', status: '', role: '', employment_type: '', staff_category: '' });
+  const [draftFilters, setDraftFilters] = useState({ department_id: '', status: '', role: '', employment_type: '', staff_category: '' });
   const [savedFilters, setSavedFilters] = useState(() => {
     const saved = localStorage.getItem('hrms_emp_saved_filters');
     return saved ? JSON.parse(saved) : [];
   });
   const [visibleCols, setVisibleCols] = useState(() => {
     const saved = localStorage.getItem('hrms_emp_visible_cols');
-    return saved ? JSON.parse(saved) : { employee_id: true, first_name: true, role: true, department_id: true, employment_type: true, join_date: true, status: true };
+    return saved ? JSON.parse(saved) : { employee_id: true, first_name: true, role: true, department_id: true, employment_type: true, join_date: true, status: true, last_login: true };
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
@@ -109,9 +109,9 @@ export default function Employees() {
     setPage(1);
     setShowAdvanced(false);
   };
-  
+
   const clearFilters = () => {
-    const empty = { department_id: '', status: '', role: '', employment_type: '' };
+    const empty = { department_id: '', status: '', role: '', employment_type: '', staff_category: '' };
     setDraftFilters(empty);
     setFilters(empty);
     setPage(1);
@@ -173,7 +173,7 @@ export default function Employees() {
   }, []);
 
   const [form, setForm] = useState({
-    personal_email: '', email: '', role: 'STAFF',
+    personal_email: '', email: '', role: 'STAFF', staff_category: 'NON_TEACHING',
     first_name: '', last_name: '', employee_id: '',
     join_date: '', department_id: '', designation: '', employment_type: '',
     pan_number: '', uan_number: '', bank_name: '', bank_account_number: '', ifsc_code: ''
@@ -203,11 +203,19 @@ export default function Employees() {
         department_id: filters.department_id || undefined,
         status: filters.status || undefined,
         role: filters.role || undefined,
+        staff_category: filters.staff_category || undefined,
         employment_type: filters.employment_type || undefined,
       });
       const d = r.data?.data || r.data;
-      if (d?.items) { setEmployees(d.items); setTotal(d.total); }
-      else if (Array.isArray(d)) { setEmployees(d); setTotal(d.length); }
+      const flatItems = (d?.items || (Array.isArray(d) ? d : [])).map(emp => ({
+        ...emp,
+        ...(emp.address || {}),
+        ...(emp.financials || {}),
+        ...(emp.employment || {}),
+        bank_name: emp.financials?.bank_branch?.bank_name || emp.financials?.bank_name || '',
+      }));
+      if (d?.items) { setEmployees(flatItems); setTotal(d.total); }
+      else if (Array.isArray(d)) { setEmployees(flatItems); setTotal(flatItems.length); }
     } catch (e) {
       toast(e.response?.data?.detail || 'Failed to load employees', 'error');
     } finally { setLoading(false); }
@@ -224,7 +232,7 @@ export default function Employees() {
   // We still pre-fill a readable placeholder so the user understands the format.
   useEffect(() => {
     if (!showCreate) return;
-    const PREFIXES = { SUPER_ADMIN: 'UNI-AD-', HR_MANAGER: 'UNI-HR-', HR_STAFF: 'UNI-HRS-', DIRECTOR: 'UNI-DR-', FACULTY: 'UNI-FA-', STAFF: 'UNI-ST-' };
+    const PREFIXES = { SUPER_ADMIN: 'UNI-AD-', HR_MANAGER: 'UNI-HR-', HR_STAFF: 'UNI-HRS-', DIRECTOR: 'UNI-DR-', FACULTY: 'UNI-FA-', STAFF: 'UNI-ST-', ACCOUNTANT: 'UNI-AC-' };
     const pfx = PREFIXES[form.role] || 'UNI-EMP-';
     // Fixed for 1M+ rows: show format hint only — backend assigns the real unique ID
     // User can override manually; backend validates uniqueness via DB constraint
@@ -235,22 +243,20 @@ export default function Employees() {
   const handleCreate = async e => {
     e.preventDefault(); setCreating(true);
     try {
-      await employeesAPI.create({ 
-        ...form, 
+      await employeesAPI.create({
+        personal_email: form.personal_email,
         email: form.email || null,
-        department_id: form.department_id || null, 
-        designation: form.designation || null, 
-        employment_type: form.employment_type || null,
-        salary: null,
-        pan_number: form.pan_number || null,
-        uan_number: form.uan_number || null,
-        bank_name: form.bank_name || null,
-        bank_account_number: form.bank_account_number || null,
-        ifsc_code: form.ifsc_code || null
+        role: form.role,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        employee_id: form.employee_id,
+        address: { street: form.street, campus: form.campus, pincode: form.pincode },
+        financials: { pan_number: form.pan_number, uan_number: form.uan_number, bank_account_number: form.bank_account_number, ifsc_code: form.ifsc_code },
+        employment: { department_id: form.department_id || null, designation: form.designation || null, employment_type: form.employment_type || null, staff_category: form.staff_category || null, join_date: form.join_date || null }
       });
       toast('Employee created and credentials emailed!', 'success');
       setShowCreate(false);
-      setForm({ personal_email: '', email: '', role: 'STAFF', first_name: '', last_name: '', employee_id: '', join_date: '', department_id: '', designation: '', employment_type: '', pan_number: '', uan_number: '', bank_name: '', bank_account_number: '', ifsc_code: '' });
+      setForm({ personal_email: '', email: '', role: 'STAFF', staff_category: 'NON_TEACHING', first_name: '', last_name: '', employee_id: '', join_date: '', department_id: '', designation: '', employment_type: '', pan_number: '', uan_number: '', bank_name: '', bank_account_number: '', ifsc_code: '' });
       load();
     } catch (e) { toast(e.response?.data?.detail || 'Create failed', 'error'); }
     finally { setCreating(false); }
@@ -260,27 +266,46 @@ export default function Employees() {
     e.preventDefault(); setCreating(true);
     try {
       const payload = {
-        ...form,
-        email: form.email || null,
-        department_id: form.department_id || null,
-        designation: form.designation || null,
-        employment_type: form.employment_type || null,
-        pan_number: form.pan_number || null,
-        uan_number: form.uan_number || null,
-        bank_name: form.bank_name || null,
-        bank_account_number: form.bank_account_number || null,
-        ifsc_code: form.ifsc_code || null
+        first_name: form.first_name,
+        last_name: form.last_name,
+        phone: form.phone || null,
+        role: form.role || null,
+        status: form.status || null,
+        gender: form.gender || null,
+        date_of_birth: form.date_of_birth || null,
+        nationality: form.nationality || null,
+        profile_photo: form.profile_photo || null,
+        bio: form.bio || null,
+        address: { street: form.street, campus: form.campus, pincode: form.pincode },
+        financials: { pan_number: form.pan_number, uan_number: form.uan_number, bank_account_number: form.bank_account_number, ifsc_code: form.ifsc_code },
+        employment: { department_id: form.department_id || null, designation: form.designation || null, employment_type: form.employment_type || null, staff_category: form.staff_category || null, join_date: form.join_date || null }
       };
-      delete payload.personal_email;
-      delete payload.employee_id; // Usually shouldn't change employee_id
       await employeesAPI.update(editingId, payload);
       toast('Employee updated successfully', 'success');
       setShowEdit(false);
       setEditingId(null);
-      setForm({ personal_email: '', email: '', role: 'STAFF', first_name: '', last_name: '', employee_id: '', join_date: '', department_id: '', designation: '', employment_type: '', pan_number: '', uan_number: '', bank_name: '', bank_account_number: '', ifsc_code: '' });
+      setForm({ personal_email: '', email: '', role: 'STAFF', staff_category: 'NON_TEACHING', first_name: '', last_name: '', employee_id: '', join_date: '', department_id: '', designation: '', employment_type: '', pan_number: '', uan_number: '', bank_name: '', bank_account_number: '', ifsc_code: '' });
       load();
     } catch (e) { toast(e.response?.data?.detail || 'Update failed', 'error'); }
     finally { setCreating(false); }
+  };
+
+  const handleIfscBlur = async (e) => {
+    const code = form.ifsc_code;
+    if (code && code.length === 11) {
+      try {
+        const res = await fetch(`https://ifsc.razorpay.com/${code}`);
+        if (res.ok) {
+          const data = await res.json();
+          setForm(p => ({ ...p, bank_name: data.BANK }));
+          toast(`Bank found: ${data.BANK}`, 'success');
+        } else {
+          toast('Invalid IFSC Code. Please verify.', 'error');
+        }
+      } catch (err) {
+        console.error('IFSC fetch failed', err);
+      }
+    }
   };
 
   const handleResetPassword = async (id, name) => {
@@ -340,12 +365,21 @@ export default function Employees() {
   const inactiveCount = employees.filter(e => e.status === 'INACTIVE').length;
 
   const COLS = [
-    { key: 'employee_id', label: 'Emp ID' },
     { key: 'first_name', label: 'Name' },
+    { key: 'employee_id', label: 'Emp ID' },
     { key: 'role', label: 'Role' },
     { key: 'department_id', label: 'Department' },
     { key: 'employment_type', label: 'Type' },
+    { key: 'designation', label: 'Designation' },
     { key: 'join_date', label: 'Date Joined' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'gender', label: 'Gender' },
+    { key: 'pan_number', label: 'PAN Number' },
+    { key: 'uan_number', label: 'UAN Number' },
+    { key: 'bank_name', label: 'Bank Name' },
+    { key: 'bank_account_number', label: 'Account No.' },
+    { key: 'ifsc_code', label: 'IFSC Code' },
+    { key: 'last_login', label: 'Last Login' },
     { key: 'status', label: 'Status' },
     { key: '_actions', label: 'Actions', nosort: true },
   ];
@@ -419,7 +453,7 @@ export default function Employees() {
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
             Advanced Filters {((filters.department_id || filters.role || filters.status || filters.employment_type) ? ' (Active)' : '')}
           </button>
-          
+
           <div style={{ position: 'relative' }}>
             <button className={`emp-btn ${showColumns ? 'emp-btn-primary' : 'emp-btn-secondary'}`} onClick={() => setShowColumns(!showColumns)}>
               <Eye size={14} style={{ marginRight: 4 }} /> Columns
@@ -452,7 +486,12 @@ export default function Employees() {
               </select>
               <select className="emp-filter-select" value={draftFilters.role} onChange={e => setDraftFilters(p => ({ ...p, role: e.target.value }))}>
                 <option value="">All Roles</option>
-                {['STAFF', 'FACULTY', 'DIRECTOR', 'HR_MANAGER', 'HR_STAFF', 'SUPER_ADMIN'].map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                {['STAFF', 'FACULTY', 'DIRECTOR', 'HR_MANAGER', 'HR_STAFF', 'SUPER_ADMIN', 'ACCOUNTANT'].map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+              </select>
+              <select className="emp-filter-select" value={draftFilters.staff_category} onChange={e => setDraftFilters(p => ({ ...p, staff_category: e.target.value }))}>
+                <option value="">All Categories</option>
+                <option value="TEACHING">Teaching Staff</option>
+                <option value="NON_TEACHING">Non-Teaching Staff</option>
               </select>
               <select className="emp-filter-select" value={draftFilters.status} onChange={e => setDraftFilters(p => ({ ...p, status: e.target.value }))}>
                 <option value="">All Statuses</option>
@@ -467,7 +506,7 @@ export default function Employees() {
                 <option value="CONTRACT">Contract</option>
               </select>
             </div>
-            
+
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid var(--gray-200)', paddingTop: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-500)', marginRight: 8 }}>Saved Presets:</div>
               <select className="emp-filter-select" onChange={loadFilterPreset} value="" style={{ width: 160 }}>
@@ -475,12 +514,12 @@ export default function Employees() {
                 {savedFilters.map(sf => <option key={sf.id} value={sf.id}>{sf.name}</option>)}
               </select>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 12 }}>
-                <input 
-                  className="emp-search-input" 
-                  style={{ padding: '6px 10px', width: 140 }} 
-                  placeholder="Preset Name..." 
-                  value={presetName} 
-                  onChange={e => setPresetName(e.target.value)} 
+                <input
+                  className="emp-search-input"
+                  style={{ padding: '6px 10px', width: 140 }}
+                  placeholder="Preset Name..."
+                  value={presetName}
+                  onChange={e => setPresetName(e.target.value)}
                 />
                 <button className="emp-btn emp-btn-outline emp-btn-sm" onClick={saveFilterPreset}>Save</button>
               </div>
@@ -542,13 +581,14 @@ export default function Employees() {
           <table className="emp-table" style={{ position: 'relative' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--gray-100)' }}>
               <tr>
-                <th style={{ width: 40, padding: '11px 16px' }}>
+                <th style={{ width: 48, minWidth: 48, padding: '11px 16px', position: 'sticky', left: 0, zIndex: 12, background: 'var(--gray-100)' }}>
                   <input type="checkbox" className="emp-checkbox" checked={selected.length === employees.length && employees.length > 0} onChange={toggleAll} />
                 </th>
                 {COLS.map(c => {
                   if (c.key !== '_actions' && !visibleCols[c.key]) return null;
+                  const isSticky = c.key === 'first_name';
                   return (
-                    <th key={c.key} className={c.nosort ? '' : 'sortable'} onClick={() => !c.nosort && toggleSort(c.key)}>
+                    <th key={c.key} className={c.nosort ? '' : 'sortable'} onClick={() => !c.nosort && toggleSort(c.key)} style={isSticky ? { position: 'sticky', left: 48, zIndex: 12, background: 'var(--gray-100)', borderRight: '1px solid var(--gray-300)' } : {}}>
                       {c.label} <SortIcon col={c.key} />
                     </th>
                   );
@@ -576,11 +616,10 @@ export default function Employees() {
                 const isSelected = selected.includes(emp.id);
                 return (
                   <tr key={emp.id} className={isSelected ? 'selected' : ''}>
-                    <td>
+                    <td style={{ position: 'sticky', left: 0, zIndex: 2, background: isSelected ? 'var(--gray-50)' : 'var(--white)' }}>
                       <input type="checkbox" className="emp-checkbox" checked={isSelected} onChange={() => toggleOne(emp.id)} />
                     </td>
-                    {visibleCols['employee_id'] && <td><span className="emp-id-chip">{emp.employee_id}</span></td>}
-                    {visibleCols['first_name'] && <td>
+                    {visibleCols['first_name'] && <td style={{ position: 'sticky', left: 48, zIndex: 2, background: isSelected ? 'var(--gray-50)' : 'var(--white)', borderRight: '1px solid var(--gray-200)' }}>
                       <div className="emp-name-cell">
                         <div className="emp-avatar" style={{ background: av.bg, color: av.fg }}>
                           {initials(emp.first_name, emp.last_name)}
@@ -591,10 +630,20 @@ export default function Employees() {
                         </div>
                       </div>
                     </td>}
+                    {visibleCols['employee_id'] && <td><span className="emp-id-chip">{emp.employee_id}</span></td>}
                     {visibleCols['role'] && <td><RoleChip role={emp.role} /></td>}
                     {visibleCols['department_id'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{getDept(emp.department_id)}</td>}
                     {visibleCols['employment_type'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.employment_type || '—'}</td>}
+                    {visibleCols['designation'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.designation || '—'}</td>}
                     {visibleCols['join_date'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.join_date ? new Date(emp.join_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>}
+                    {visibleCols['phone'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.phone || '—'}</td>}
+                    {visibleCols['gender'] && <td style={{ fontSize: 13, color: 'var(--gray-600)', textTransform: 'capitalize' }}>{emp.gender?.toLowerCase() || '—'}</td>}
+                    {visibleCols['pan_number'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.pan_number || '—'}</td>}
+                    {visibleCols['uan_number'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.uan_number || '—'}</td>}
+                    {visibleCols['bank_name'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.bank_name || '—'}</td>}
+                    {visibleCols['bank_account_number'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.bank_account_number || '—'}</td>}
+                    {visibleCols['ifsc_code'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.ifsc_code || '—'}</td>}
+                    {visibleCols['last_login'] && <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{emp.last_login ? new Date(emp.last_login).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never'}</td>}
                     {visibleCols['status'] && <td><StatusBadge status={emp.status} /></td>}
                     <td style={{ position: 'relative' }}>
                       <div className="emp-kebab-container" style={{ position: 'relative', display: 'inline-block' }}>
@@ -705,7 +754,7 @@ export default function Employees() {
 
               {/* Scrollable Data Sections */}
               <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 32 }}>
-                
+
                 {/* Professional Info */}
                 <div>
                   <h3 style={{ margin: '0 0 16px 0', fontSize: 13, textTransform: 'uppercase', color: 'var(--gray-500)', fontWeight: 700, letterSpacing: '0.5px' }}>Professional Information</h3>
@@ -786,7 +835,7 @@ export default function Employees() {
             <button className="emp-btn emp-btn-secondary" onClick={() => setShowBulk(null)}>Cancel</button>
             <button
               className={`emp-btn ${showBulk?.type === 'delete' ? 'emp-btn-danger' : 'emp-btn-primary'}`}
-              onClick={handleBulk} 
+              onClick={handleBulk}
               disabled={bulkLoading || (showBulk?.type === 'delete' ? bulkVal !== 'CONFIRM' : !bulkVal)}
             >
               {bulkLoading ? 'Processing…' : (showBulk?.type === 'delete' ? 'I understand, deactivate' : 'Confirm')}
@@ -799,7 +848,7 @@ export default function Employees() {
         </p>
         {showBulk?.type === 'delete' && (
           <div style={{ position: 'relative', overflow: 'hidden', border: '1px solid #7f1d1d', borderRadius: 12, padding: 24, background: 'linear-gradient(135deg, #2a0808 0%, #170303 100%)', marginTop: 16, marginBottom: 16, boxShadow: '0 8px 32px rgba(220, 38, 38, 0.15)' }}>
-            
+
             {/* Cool hazard striping effect on top edge */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'repeating-linear-gradient(45deg, #dc2626, #dc2626 10px, #991b1b 10px, #991b1b 20px)' }} />
 
@@ -809,21 +858,21 @@ export default function Employees() {
               </div>
               <h4 style={{ color: '#fca5a5', margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Danger Zone</h4>
             </div>
-            
+
             <p style={{ fontSize: 13.5, color: '#fecaca', margin: '0 0 20px 0', lineHeight: 1.6, opacity: 0.9 }}>
               You are about to <strong style={{ color: '#fff' }}>permanently deactivate</strong> the selected employees. This action will revoke all system access instantly.
             </p>
-            
+
             <div style={{ background: 'rgba(0,0,0,0.4)', padding: 16, borderRadius: 8, border: '1px solid rgba(220, 38, 38, 0.3)' }}>
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: '#fca5a5', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 <span>Verification Required</span>
                 <span style={{ background: '#7f1d1d', color: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 11 }}>Type CONFIRM</span>
               </label>
-              <input 
-                type="text" 
-                placeholder="CONFIRM" 
-                value={bulkVal} 
-                onChange={e => setBulkVal(e.target.value)} 
+              <input
+                type="text"
+                placeholder="CONFIRM"
+                value={bulkVal}
+                onChange={e => setBulkVal(e.target.value)}
                 style={{ width: '100%', padding: '12px 14px', border: '1px solid #991b1b', borderRadius: 6, outline: 'none', background: '#1a0505', color: '#ef4444', fontWeight: 700, fontFamily: 'monospace', fontSize: 15, letterSpacing: '2px', transition: 'all 0.2s ease' }}
                 onFocus={e => { e.target.style.borderColor = '#ef4444'; e.target.style.boxShadow = '0 0 0 3px rgba(220,38,38,0.2)'; }}
                 onBlur={e => { e.target.style.borderColor = '#991b1b'; e.target.style.boxShadow = 'none'; }}
@@ -853,7 +902,7 @@ export default function Employees() {
           <Field label="New Role">
             <select value={bulkVal} onChange={e => setBulkVal(e.target.value)}>
               <option value="">Select…</option>
-              {['STAFF', 'FACULTY', 'DIRECTOR', 'HR_MANAGER', 'HR_STAFF'].map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+              {['STAFF', 'FACULTY', 'DIRECTOR', 'HR_MANAGER', 'HR_STAFF', 'ACCOUNTANT'].map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
             </select>
           </Field>
         )}
@@ -891,7 +940,13 @@ export default function Employees() {
           </div>
           <Field label="System Role">
             <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}>
-              {['STAFF', 'FACULTY', 'DIRECTOR', 'HR_STAFF', 'HR_MANAGER', 'SUPER_ADMIN'].map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+              {['STAFF', 'FACULTY', 'DIRECTOR', 'HR_STAFF', 'HR_MANAGER', 'SUPER_ADMIN', 'ACCOUNTANT'].map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+            </select>
+          </Field>
+          <Field label="Staff Category">
+            <select value={form.staff_category} onChange={e => setForm(p => ({ ...p, staff_category: e.target.value }))}>
+              <option value="TEACHING">Teaching Staff</option>
+              <option value="NON_TEACHING">Non-Teaching Staff</option>
             </select>
           </Field>
 
@@ -930,18 +985,20 @@ export default function Employees() {
 
           <div className="emp-section-label">Statutory & Bank Details</div>
           <div className="emp-grid-2">
-            <Field label="PAN Number"><input placeholder="ABCDE1234F" value={form.pan_number} onChange={e => setForm(p => ({ ...p, pan_number: e.target.value }))} /></Field>
-            <Field label="UAN Number"><input placeholder="12-digit UAN" value={form.uan_number} onChange={e => setForm(p => ({ ...p, uan_number: e.target.value }))} /></Field>
+            <Field label="PAN Number"><input pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}" title="Format: 5 uppercase letters, 4 digits, 1 uppercase letter (e.g. ABCDE1234F)" style={{ textTransform: 'uppercase' }} placeholder="ABCDE1234F" value={form.pan_number} onChange={e => setForm(p => ({ ...p, pan_number: e.target.value.toUpperCase() }))} /></Field>
+            <Field label="UAN Number"><input pattern="^\d{12}$" title="UAN must be exactly 12 digits" placeholder="12-digit UAN" value={form.uan_number} onChange={e => setForm(p => ({ ...p, uan_number: e.target.value.replace(/\D/g, '') }))} /></Field>
           </div>
           <div className="emp-grid-2">
-            <Field label="Bank Name"><input placeholder="e.g. HDFC Bank" value={form.bank_name} onChange={e => setForm(p => ({ ...p, bank_name: e.target.value }))} /></Field>
-            <Field label="Account Number"><input placeholder="Account No." value={form.bank_account_number} onChange={e => setForm(p => ({ ...p, bank_account_number: e.target.value }))} /></Field>
+            <Field label="IFSC Code"><input pattern="^[A-Z]{4}0[A-Z0-9]{6}$" title="Must be 11 characters, starting with 4 letters followed by a zero, then 6 alphanumeric characters" style={{ textTransform: 'uppercase' }} placeholder="e.g. HDFC0001234" value={form.ifsc_code} onBlur={handleIfscBlur} onChange={e => setForm(p => ({ ...p, ifsc_code: e.target.value.toUpperCase() }))} /></Field>
+            <Field label="Bank Name"><input readOnly style={{ background: '#f8fafc' }} placeholder="Auto-filled from IFSC" value={form.bank_name} onChange={e => setForm(p => ({ ...p, bank_name: e.target.value }))} /></Field>
           </div>
           <div className="emp-grid-2">
-            <Field label="IFSC Code"><input placeholder="e.g. HDFC0001234" value={form.ifsc_code} onChange={e => setForm(p => ({ ...p, ifsc_code: e.target.value }))} /></Field>
+            <Field label="Account Number"><input pattern="^\d{9,18}$" title="Account number must be between 9 and 18 digits" placeholder="Account No." value={form.bank_account_number} onChange={e => setForm(p => ({ ...p, bank_account_number: e.target.value.replace(/\D/g, '') }))} /></Field>
             <div />
           </div>
+
         </form>
+
       </EmpModal>
     </div>
   );

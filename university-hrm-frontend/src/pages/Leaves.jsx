@@ -5,13 +5,6 @@ import {
   PageHeader, Card, Table, Btn, Modal, Input, Select, Textarea, Badge, Tabs, toast,
 } from '../components/ui';
 import { Plus, X, Check, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
-// Note: employeesAPI removed — empList was fetched but never used (saves MB of memory)
-
-// Fixed for 1M+ rows scalability:
-// - Removed unused employeesAPI.list() / empList fetch (saves hundreds of MB of memory)
-// - Added server-side pagination to both "my leaves" and "manage" tabs
-// - AbortController cancels stale requests when page/tab changes
-// - Overlay spinner keeps old data visible instead of flicker-replacing with skeletons
 
 const STATUS_BADGE = {
   PENDING:   { variant: 'warning', label: 'Pending' },
@@ -28,10 +21,12 @@ const LEAVE_TYPES = [
   { value: 'PATERNITY',    label: 'Paternity' },
   { value: 'UNPAID',       label: 'Unpaid' },
   { value: 'COMPENSATORY', label: 'Compensatory' },
+  { value: 'SABBATICAL',   label: 'Sabbatical' },
+  { value: 'EXAM_DUTY',    label: 'Exam Duty' },
 ];
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-const PAGE_SIZE = 25; // Fixed for 1M+ rows: smaller page size for leave records
+const PAGE_SIZE = 25; 
 
 export default function Leaves() {
   const { hasRole } = useAuth();
@@ -42,7 +37,6 @@ export default function Leaves() {
   const [balances, setBalances] = useState(null);
   const [loading, setLoading]   = useState(true);
 
-  // Fixed for 1M+ rows scalability: pagination state per tab
   const [myPage, setMyPage]   = useState(1);
   const [allPage, setAllPage] = useState(1);
   const [myTotal, setMyTotal] = useState(0);
@@ -54,11 +48,15 @@ export default function Leaves() {
   const [editing, setEditing]       = useState(false);
   const [aiLoading, setAiLoading]   = useState(false);
   const [aiText, setAiText]         = useState('');
+  
+  const [showAiReasonModal, setShowAiReasonModal] = useState(false);
+  const [roughReason, setRoughReason] = useState('');
+  const [refiningReason, setRefiningReason] = useState(false);
 
-  const abortRef = useRef(null); // Fixed for 1M+ rows: cancel stale requests
+  const abortRef = useRef(null); 
 
   const [form, setForm] = useState({
-    leaveType: 'CASUAL', fromDate: '', toDate: '', reason: '',
+    leave_type: 'CASUAL', from_date: '', to_date: '', reason: '',
   });
 
   const isHR       = hasRole('admin', 'hr', 'hr_staff');
@@ -71,19 +69,16 @@ export default function Leaves() {
     ...(canManage ? [{ key: 'manage', label: isHR ? 'All Requests' : 'Team Requests' }] : []),
   ];
 
-  // Fixed for 1M+ rows: paginated fetching with AbortController
   const loadData = useCallback(async () => {
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
 
     setLoading(true);
     try {
-      // Always load leave balance (lightweight — always a single record)
       const balRes = await leavesAPI.balance().catch(() => ({ data: null }));
       setBalances(balRes.data);
 
       if (tab === 'my') {
-        // Fixed: paginated my-leaves — never fetch all
         const { data: myRes } = await leavesAPI.list({
           limit: PAGE_SIZE,
           skip: (myPage - 1) * PAGE_SIZE,
@@ -92,12 +87,11 @@ export default function Leaves() {
         setMyLeaves(items);
         setMyTotal(myRes?.data?.total || myRes?.total || items.length);
       } else if (tab === 'manage' && canManage) {
-        // Fixed: paginated management view — filter to PENDING only to reduce load
         const endpoint = isHR ? leavesAPI.hrAll : leavesAPI.hodPending;
         const { data } = await endpoint({
           limit: PAGE_SIZE,
           skip: (allPage - 1) * PAGE_SIZE,
-          status: 'PENDING', // Fixed: only load PENDING by default to reduce dataset size
+          status: 'PENDING', 
         });
         const items = data?.data?.items || data?.items || data?.data || (Array.isArray(data) ? data : []);
         setAllLeaves(items);
@@ -113,24 +107,35 @@ export default function Leaves() {
   }, [tab, myPage, allPage, canManage, isHR]);
 
   useEffect(() => { loadData(); }, [loadData]);
-  // Reset pages when switching tabs
   useEffect(() => { setMyPage(1); setAllPage(1); }, [tab]);
 
   // ── Handlers ───────────────────────────────────────────────────────
 
   const handleApply = async (e) => {
     e.preventDefault();
+    
+    // Calculate total days (inclusive of both start and end date)
+    const from = new Date(form.from_date);
+    const to = new Date(form.to_date);
+    if (to < from) {
+      toast('To Date cannot be before From Date', 'error');
+      return;
+    }
+    const diffTime = Math.abs(to - from);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
     setApplying(true);
     try {
       await leavesAPI.apply({
-        leaveType: form.leaveType,
-        fromDate:  form.fromDate,
-        toDate:    form.toDate,
-        reason:    form.reason,
+        leave_type: form.leave_type,
+        from_date:  new Date(form.from_date).toISOString(),
+        to_date:    new Date(form.to_date).toISOString(),
+        total_days: diffDays,
+        reason:     form.reason,
       });
       toast('Leave application submitted', 'success');
       setShowApply(false);
-      setForm({ leaveType: 'CASUAL', fromDate: '', toDate: '', reason: '' });
+      setForm({ leave_type: 'CASUAL', from_date: '', to_date: '', reason: '' });
       setMyPage(1);
       loadData();
     } catch (e) {
@@ -175,7 +180,7 @@ export default function Leaves() {
   };
 
   const handleAiRecommend = async () => {
-    if (!form.fromDate || !form.toDate) {
+    if (!form.from_date || !form.to_date) {
       toast('Select dates first', 'warning');
       return;
     }
@@ -183,10 +188,10 @@ export default function Leaves() {
     setAiText('');
     try {
       const { data } = await aiAPI.chat(
-        `I'm planning leave from ${form.fromDate} to ${form.toDate} (${form.leaveType}). ` +
+        `I'm planning leave from ${form.from_date} to ${form.to_date} (${form.leave_type}). ` +
         `Is this a good time? Are there any holidays nearby I should know about? Keep response to 2 sentences.`
       );
-      setAiText(data?.reply || data?.message || '');
+      setAiText(data?.response || data?.reply || data?.message || '');
     } catch {
       toast('AI assistant unavailable', 'error');
     } finally {
@@ -194,15 +199,47 @@ export default function Leaves() {
     }
   };
 
+  const handleAiRefineReason = async () => {
+    if (!roughReason.trim()) {
+      toast('Please enter a rough reason first', 'warning');
+      return;
+    }
+    setRefiningReason(true);
+    try {
+      const { data } = await aiAPI.chat(
+        `I am applying for a ${form.leave_type} leave from ${form.from_date || 'TBD'} to ${form.to_date || 'TBD'}. ` +
+        `My rough reason is: "${roughReason}". ` +
+        `Please rewrite this into a single, highly professional, polite, and concise paragraph suitable for a formal HR leave application. Do not include greetings or sign-offs, just the reason itself.`
+      );
+      const refined = data?.response || data?.reply || data?.message || '';
+      if (refined) {
+        setForm({ ...form, reason: refined.replace(/^"|"$/g, '').trim() });
+        setShowAiReasonModal(false);
+        setRoughReason('');
+        toast('Reason redefined successfully!', 'success');
+      } else {
+        toast('AI returned an empty response', 'warning');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('AI assistant unavailable', 'error');
+    } finally {
+      setRefiningReason(false);
+    }
+  };
+
   // ── Leave balance cards ─────────────────────────────────────────────
 
   const BalanceCards = () => {
-    if (!balances) return null;
+    if (!balances || !Array.isArray(balances)) return null;
+
+    const getBal = (type) => balances.find(b => (b.leave_type || '').toUpperCase() === type) || { total_days: 0, used_days: 0 };
+
     const types = [
-      { key: 'annual',       label: 'Annual',   total: balances.annualTotal,        used: balances.annualUsed },
-      { key: 'sick',         label: 'Sick',     total: balances.sickTotal,          used: balances.sickUsed },
-      { key: 'casual',       label: 'Casual',   total: balances.casualTotal,        used: balances.casualUsed },
-      { key: 'compensatory', label: 'Comp Off', total: balances.compensatoryTotal,  used: balances.compensatoryUsed },
+      { key: 'annual',       label: 'Annual',   total: getBal('ANNUAL').total_days,        used: getBal('ANNUAL').used_days },
+      { key: 'sick',         label: 'Sick',     total: getBal('SICK').total_days,          used: getBal('SICK').used_days },
+      { key: 'casual',       label: 'Casual',   total: getBal('CASUAL').total_days,        used: getBal('CASUAL').used_days },
+      { key: 'compensatory', label: 'Comp Off', total: getBal('COMPENSATORY').total_days,  used: getBal('COMPENSATORY').used_days },
     ].filter(t => t.total > 0);
 
     return (
@@ -230,8 +267,8 @@ export default function Leaves() {
   // ── Table columns ──────────────────────────────────────────────────
 
   const typeCol = {
-    key: 'leaveType', label: 'Type',
-    render: (r) => <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{(r.leaveType || '').toLowerCase()}</span>,
+    key: 'leave_type', label: 'Type',
+    render: (r) => <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{(r.leave_type || '').toLowerCase()}</span>,
   };
   const statusCol = {
     key: 'status', label: 'Status',
@@ -243,9 +280,9 @@ export default function Leaves() {
 
   const myCols = [
     typeCol,
-    { key: 'fromDate', label: 'From',   render: (r) => fmtDate(r.fromDate) },
-    { key: 'toDate',   label: 'To',     render: (r) => fmtDate(r.toDate) },
-    { key: 'totalDays',label: 'Days',   render: (r) => r.totalDays ?? '—' },
+    { key: 'from_date', label: 'From',   render: (r) => fmtDate(r.from_date) },
+    { key: 'to_date',   label: 'To',     render: (r) => fmtDate(r.to_date) },
+    { key: 'total_days',label: 'Days',   render: (r) => r.total_days ?? '—' },
     { key: 'reason',   label: 'Reason', render: (r) => <span style={{ maxWidth: 180, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</span> },
     statusCol,
     { key: 'act', label: '', render: (r) =>
@@ -260,9 +297,9 @@ export default function Leaves() {
   const manageCols = [
     { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
     typeCol,
-    { key: 'fromDate', label: 'From', render: (r) => fmtDate(r.fromDate) },
-    { key: 'toDate',   label: 'To',   render: (r) => fmtDate(r.toDate) },
-    { key: 'totalDays',label: 'Days', render: (r) => r.totalDays ?? '—' },
+    { key: 'from_date', label: 'From', render: (r) => fmtDate(r.from_date) },
+    { key: 'to_date',   label: 'To',   render: (r) => fmtDate(r.to_date) },
+    { key: 'total_days',label: 'Days', render: (r) => r.total_days ?? '—' },
     statusCol,
     { key: 'act', label: 'Actions', render: (r) => {
       if (r.status !== 'PENDING') return null;
@@ -323,7 +360,6 @@ export default function Leaves() {
         <div style={{ padding: '16px 20px 0' }}>
           <Tabs tabs={tabs} active={tab} onChange={setTab} />
         </div>
-        {/* Fixed: overlay spinner instead of full skeleton replacement */}
         <div style={{ position: 'relative' }}>
           {loading && (tab === 'my' ? myLeaves : allLeaves).length > 0 && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
@@ -340,12 +376,12 @@ export default function Leaves() {
       {/* ── Apply Modal ── */}
       <Modal open={showApply} onClose={() => setShowApply(false)} title="Apply for Leave">
         <form onSubmit={handleApply}>
-          <Select label="Leave Type" value={form.leaveType} onChange={(e) => setForm({ ...form, leaveType: e.target.value })} id="lt">
+          <Select label="Leave Type" value={form.leave_type} onChange={(e) => setForm({ ...form, leave_type: e.target.value })} id="lt">
             {LEAVE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </Select>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-            <Input label="From Date" type="date" value={form.fromDate} onChange={(e) => setForm({ ...form, fromDate: e.target.value })} required id="ld-from" />
-            <Input label="To Date"   type="date" value={form.toDate}   onChange={(e) => setForm({ ...form, toDate: e.target.value })}   required min={form.fromDate} id="ld-to" />
+            <Input label="From Date" type="date" value={form.from_date} onChange={(e) => setForm({ ...form, from_date: e.target.value })} required id="ld-from" />
+            <Input label="To Date"   type="date" value={form.to_date}   onChange={(e) => setForm({ ...form, to_date: e.target.value })}   required min={form.from_date} id="ld-to" />
           </div>
           <div style={{ margin: '10px 0' }}>
             <Btn type="button" variant="ghost" size="sm" loading={aiLoading} onClick={handleAiRecommend}>
@@ -357,12 +393,34 @@ export default function Leaves() {
               </div>
             )}
           </div>
-          <Textarea label="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} required placeholder="Describe the reason for leave" id="ld-reason" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--gray-700)' }}>Reason</span>
+            <Btn type="button" variant="ghost" size="xs" onClick={() => setShowAiReasonModal(true)}>
+              ✨ Ask AI to Write
+            </Btn>
+          </div>
+          <Textarea value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} required placeholder="Describe the reason for leave" id="ld-reason" />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
             <Btn variant="secondary" type="button" onClick={() => setShowApply(false)}>Cancel</Btn>
             <Btn type="submit" loading={applying}>Submit Application</Btn>
           </div>
         </form>
+      </Modal>
+
+      {/* ── AI Reason Refiner Modal ── */}
+      <Modal open={showAiReasonModal} onClose={() => setShowAiReasonModal(false)} title="AI Reason Writer">
+        <div style={{ marginBottom: 16 }}>
+          <Textarea 
+            label="What is your reason roughly?" 
+            placeholder="e.g. going to a wedding, got sick with fever..." 
+            value={roughReason} 
+            onChange={(e) => setRoughReason(e.target.value)} 
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <Btn variant="secondary" onClick={() => setShowAiReasonModal(false)}>Cancel</Btn>
+          <Btn onClick={handleAiRefineReason} loading={refiningReason}>✨ Refine Reason</Btn>
+        </div>
       </Modal>
 
       {/* ── HR Edit Modal ── */}
@@ -371,8 +429,8 @@ export default function Leaves() {
           <form onSubmit={handleEditSubmit}>
             <div style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 16, lineHeight: 1.6 }}>
               <strong>Employee:</strong> {editLeave.employee?.first_name} {editLeave.employee?.last_name}<br />
-              <strong>Type:</strong> {editLeave.leaveType}<br />
-              <strong>Period:</strong> {fmtDate(editLeave.fromDate)} → {fmtDate(editLeave.toDate)} ({editLeave.totalDays} days)<br />
+              <strong>Type:</strong> {editLeave.leave_type}<br />
+              <strong>Period:</strong> {fmtDate(editLeave.from_date)} → {fmtDate(editLeave.to_date)} ({editLeave.total_days} days)<br />
               <strong>Reason:</strong> {editLeave.reason}
             </div>
             <Textarea label="HR Notes (internal)" placeholder="Add internal HR note" id="hr-note" />

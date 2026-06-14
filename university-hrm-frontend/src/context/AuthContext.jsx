@@ -55,14 +55,16 @@ export function AuthProvider({ children }) {
       
       return { ok: true };
     } catch (e) {
-      const msg =
-        e.response?.data?.error ||
-        e.response?.data?.message ||
-        e.response?.data?.detail ||
-        e.message ||
-        'Login failed';
-      setAuthError(String(msg));
-      return { ok: false, error: String(msg) };
+      const d = e.response?.data || {};
+      let msg = 'Login failed';
+      if (typeof d.message === 'string') msg = d.message;
+      else if (typeof d.detail === 'string') msg = d.detail;
+      else if (Array.isArray(d.detail) && d.detail[0]?.msg) msg = d.detail[0].msg;
+      else if (typeof d.error === 'string') msg = d.error;
+      else if (e.message) msg = e.message;
+
+      setAuthError(msg);
+      return { ok: false, error: msg };
     } finally {
       setLoading(false);
     }

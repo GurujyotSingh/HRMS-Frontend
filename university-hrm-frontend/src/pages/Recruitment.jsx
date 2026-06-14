@@ -62,7 +62,7 @@ export default function Recruitment() {
 
     setLoading(true);
     try {
-      const { data } = await recruitmentAPI.listJobs({
+      const data = await recruitmentAPI.listJobs({
         limit: PAGE_SIZE,
         skip: (page - 1) * PAGE_SIZE,
         search: jobSearch || undefined,
@@ -162,6 +162,16 @@ export default function Recruitment() {
     }
   };
 
+  const updateJobStatus = async (id, status) => {
+    try {
+      await recruitmentAPI.updateJob(id, { status });
+      toast('Job status updated successfully', 'success');
+      loadJobs(page);
+    } catch (err) {
+      toast('Failed to update job status', 'error');
+    }
+  };
+
   const getDeptName = (id) => {
     const dept = departments.find(d => d.id === id);
     return dept ? dept.name : id || '—';
@@ -194,7 +204,11 @@ export default function Recruitment() {
       label: 'Status',
       render: (j) => {
         const variants = { 'OPEN': 'success', 'CLOSED': 'danger', 'PAUSED': 'warning' };
-        return <Badge variant={variants[j.status] || 'neutral'}>{j.status}</Badge>;
+        let normalizedStatus = j.status?.toUpperCase() || 'OPEN';
+        if (j.closing_date && new Date(j.closing_date).getTime() < new Date().setHours(0,0,0,0) && normalizedStatus === 'OPEN') {
+          normalizedStatus = 'CLOSED';
+        }
+        return <Badge variant={variants[normalizedStatus] || 'neutral'}>{normalizedStatus}</Badge>;
       }
     },
     { 
@@ -206,9 +220,22 @@ export default function Recruitment() {
       key: 'actions',
       label: 'Actions',
       render: (j) => (
-        <Btn variant="secondary" size="sm" onClick={() => viewApplicants(j)}>
-          <Users size={14} /> Applicants
-        </Btn>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {canManage && (
+            <Select 
+              value={j.status?.toUpperCase() || 'OPEN'}
+              onChange={(e) => updateJobStatus(j.id, e.target.value)}
+              style={{ width: 100, padding: '4px 8px', marginBottom: 0, fontSize: '0.75rem' }}
+            >
+              <option value="OPEN">Open</option>
+              <option value="PAUSED">Paused</option>
+              <option value="CLOSED">Closed</option>
+            </Select>
+          )}
+          <Btn variant="secondary" size="sm" onClick={() => viewApplicants(j)}>
+            <Users size={14} /> Applicants
+          </Btn>
+        </div>
       )
     }
   ];

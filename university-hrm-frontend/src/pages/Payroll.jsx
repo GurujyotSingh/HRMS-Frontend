@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Filter, FileText, Check, X, Download,
-  Clock, DollarSign, Edit, Eye, ArrowRight, User as UserIcon
+  Clock, DollarSign, Edit, Eye, ArrowRight, User as UserIcon,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { payrollAPI, employeesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -453,8 +454,23 @@ export default function Payroll() {
         </div>
       </Card>
 
-      <Card>
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
         <Table cols={columns} rows={payrolls} loading={loading} />
+        {total > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--gray-200)', fontSize: 13 }}>
+            <span style={{ color: 'var(--gray-500)' }}>
+              Page <strong>{page}</strong> of <strong>{Math.max(1, Math.ceil(total / PAGE_SIZE))}</strong> ({total} total records)
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <Btn variant="secondary" size="xs" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+                <ChevronLeft size={13} /> Prev
+              </Btn>
+              <Btn variant="secondary" size="xs" disabled={page >= Math.ceil(total / PAGE_SIZE)} onClick={() => setPage(p => p + 1)}>
+                Next <ChevronRight size={13} />
+              </Btn>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Details Drawer (Simulated as Modal for simplicity) */}

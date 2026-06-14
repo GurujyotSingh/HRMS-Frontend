@@ -193,7 +193,7 @@ async def hr_all_leaves(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     status: Optional[str] = Query(None),
-    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN, RoleEnum.ACCOUNTANT)),
     db: AsyncSession = Depends(get_db),
 ):
     """HR/Admin: view all leave requests."""

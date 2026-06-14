@@ -33,6 +33,8 @@ export default function Attendance() {
   // Fixed for 1M+ rows: pagination state for HR view
   const [hrPage, setHrPage]   = useState(1);
   const [hrTotal, setHrTotal] = useState(0);
+  const [hrMonth, setHrMonth] = useState(now.getMonth() + 1);
+  const [hrYear, setHrYear] = useState(now.getFullYear());
 
   const isHR = hasRole('hr', 'admin', 'hr_staff');
 
@@ -88,6 +90,8 @@ export default function Attendance() {
       const { data } = await attendanceAPI.hrToday({
         limit: PAGE_SIZE,
         skip: (hrPage - 1) * PAGE_SIZE,
+        month: hrMonth,
+        year: hrYear,
       });
       const items = data?.data?.items || data?.items || data?.data || (Array.isArray(data) ? data : []);
       setHrRecords(items);
@@ -99,7 +103,7 @@ export default function Attendance() {
     } finally {
       setLoading(false);
     }
-  }, [hrPage]);
+  }, [hrPage, hrMonth, hrYear]);
 
   const handleAutoClockOut = async () => {
     try {
@@ -155,8 +159,8 @@ export default function Attendance() {
     setEditing(true);
     try {
       await attendanceAPI.hrUpdate(editAtt.id, {
-        clockIn: editAtt.clockIn ? new Date(editAtt.clockIn).toISOString() : null,
-        clockOut: editAtt.clockOut ? new Date(editAtt.clockOut).toISOString() : null,
+        check_in: editAtt.check_in ? new Date(editAtt.check_in).toISOString() : null,
+        check_out: editAtt.check_out ? new Date(editAtt.check_out).toISOString() : null,
         status: editAtt.status,
       });
       toast('Attendance record updated successfully', 'success');
@@ -176,9 +180,9 @@ export default function Attendance() {
 
   const recordCols = [
     { key: 'date', label: 'Date', render: (r) => new Date(r.date).toLocaleDateString('en-IN') },
-    { key: 'clockIn', label: 'Clock In', render: (r) => formatTime(r.clockIn) },
-    { key: 'clockOut', label: 'Clock Out', render: (r) => formatTime(r.clockOut) },
-    { key: 'totalHours', label: 'Hours', render: (r) => r.totalHours ? `${r.totalHours.toFixed(1)}h` : '—' },
+    { key: 'clockIn', label: 'Clock In', render: (r) => formatTime(r.check_in) },
+    { key: 'clockOut', label: 'Clock Out', render: (r) => formatTime(r.check_out) },
+    { key: 'totalHours', label: 'Hours', render: (r) => r.total_hours ? `${r.total_hours.toFixed(1)}h` : '—' },
     { key: 'isLate', label: 'Late', render: (r) =>
       r.isLate ? <Badge variant="warning">Late</Badge> : <Badge variant="success">On Time</Badge>
     },
@@ -190,22 +194,22 @@ export default function Attendance() {
   const hrCols = [
     { key: 'employee_id', label: 'Emp ID', render: (r) => r.employee?.employee_id || '—' },
     { key: 'employeeName', label: 'Name', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
-    { key: 'clockIn', label: 'Clock In', render: (r) => formatTime(r.clockIn) },
-    { key: 'clockOut', label: 'Clock Out', render: (r) => formatTime(r.clockOut) },
+    { key: 'clockIn', label: 'Clock In', render: (r) => formatTime(r.check_in) },
+    { key: 'clockOut', label: 'Clock Out', render: (r) => formatTime(r.check_out) },
     { key: 'totalHours', label: 'Hours', render: (r) => {
-      if (!r.totalHours) return '—';
-      const isBurnout = r.totalHours > 9;
+      if (!r.total_hours) return '—';
+      const isBurnout = r.total_hours > 9;
       return (
         <span style={{
           color: isBurnout ? 'var(--danger)' : 'inherit',
           fontWeight: isBurnout ? 700 : 'normal'
         }}>
-          {r.totalHours.toFixed(1)}h {isBurnout && ' ⚠️'}
+          {r.total_hours.toFixed(1)}h {isBurnout && ' ⚠️'}
         </span>
       );
     }},
     { key: 'isLate', label: 'Late', render: (r) =>
-      r.isLate ? <Badge variant="warning">Late</Badge> : <Badge variant="success">On Time</Badge>
+      r.is_late ? <Badge variant="warning">Late</Badge> : <Badge variant="success">On Time</Badge>
     },
     { key: 'actions', label: 'Actions', render: (r) => (
       <Btn variant="secondary" size="xs" onClick={() => setEditAtt(r)}>
@@ -277,25 +281,25 @@ export default function Attendance() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
                   <span style={{ color: 'var(--gray-500)' }}>Clock In</span>
-                  <span style={{ fontWeight: 600 }}>{formatTime(todayStatus.clockIn)}</span>
+                  <span style={{ fontWeight: 600 }}>{formatTime(todayStatus.check_in)}</span>
                 </div>
-                {todayStatus.clockOut && (
+                {todayStatus.check_out && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
                     <span style={{ color: 'var(--gray-500)' }}>Clock Out</span>
-                    <span style={{ fontWeight: 600 }}>{formatTime(todayStatus.clockOut)}</span>
+                    <span style={{ fontWeight: 600 }}>{formatTime(todayStatus.check_out)}</span>
                   </div>
                 )}
-                {todayStatus.totalHours != null && (
+                {todayStatus.total_hours != null && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                     <span style={{ color: 'var(--gray-500)' }}>Total Hours</span>
-                    <span style={{ fontWeight: 600 }}>{todayStatus.totalHours.toFixed(1)}h</span>
+                    <span style={{ fontWeight: 600 }}>{todayStatus.total_hours.toFixed(1)}h</span>
                   </div>
                 )}
               </div>
             )}
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              {!todayStatus?.clockIn ? (
+              {!todayStatus?.check_in ? (
                 <Btn
                   size="lg"
                   onClick={handleClockIn}
@@ -304,7 +308,7 @@ export default function Attendance() {
                 >
                   <LogIn size={18} /> Clock In
                 </Btn>
-              ) : !todayStatus?.clockOut ? (
+              ) : !todayStatus?.check_out ? (
                 <Btn
                   size="lg"
                   variant="danger"
@@ -368,9 +372,34 @@ export default function Attendance() {
 
       {/* HR Tab — Fixed: now paginated */}
       {tab === 'hr' && (
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px', borderBottom: '1px solid var(--gray-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 500 }}>Today's Clock Events</span>
+        <>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+            <Select
+              value={hrMonth}
+              onChange={(e) => setHrMonth(Number(e.target.value))}
+              style={{ marginBottom: 0, maxWidth: 160 }}
+              id="hr-att-month"
+            >
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {new Date(2000, i).toLocaleString('en', { month: 'long' })}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={hrYear}
+              onChange={(e) => setHrYear(Number(e.target.value))}
+              style={{ marginBottom: 0, maxWidth: 120 }}
+              id="hr-att-year"
+            >
+              {[2024, 2025, 2026, 2027].map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </Select>
+          </div>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px', borderBottom: '1px solid var(--gray-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 500 }}>All Clock Events</span>
             <div style={{ display: 'flex', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--gray-500)', display: 'flex', alignItems: 'center' }}>
                 {hrTotal > 0 && `${hrTotal} total`}
@@ -389,6 +418,7 @@ export default function Attendance() {
           </div>
           <HrPaginationBar />
         </Card>
+        </>
       )}
 
       {/* HR Edit Modal */}
@@ -399,15 +429,15 @@ export default function Attendance() {
               <Input
                 label="Clock In (Datetime)"
                 type="datetime-local"
-                value={editAtt.clockIn ? editAtt.clockIn.substring(0, 16) : ''}
-                onChange={(e) => setEditAtt({ ...editAtt, clockIn: e.target.value })}
+                value={editAtt.check_in ? new Date(new Date(editAtt.check_in).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().substring(0, 16) : ''}
+                onChange={(e) => setEditAtt({ ...editAtt, check_in: e.target.value })}
                 id="edit-att-in"
               />
               <Input
                 label="Clock Out (Datetime)"
                 type="datetime-local"
-                value={editAtt.clockOut ? editAtt.clockOut.substring(0, 16) : ''}
-                onChange={(e) => setEditAtt({ ...editAtt, clockOut: e.target.value })}
+                value={editAtt.check_out ? new Date(new Date(editAtt.check_out).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().substring(0, 16) : ''}
+                onChange={(e) => setEditAtt({ ...editAtt, check_out: e.target.value })}
                 id="edit-att-out"
               />
             </div>

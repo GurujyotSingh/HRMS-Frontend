@@ -11,7 +11,7 @@ from app.db.models.user import User
 from app.services.encryption_service import decrypt_value
 
 
-def generate_payslip_pdf(run: PayrollRun, employee: User) -> str:
+def generate_payslip_pdf(run: PayrollRun, employee: User, creator_name: str = "System") -> str:
     """
     Generates a professional PDF payslip and saves it to the static directory.
     Returns the relative URL path to the generated PDF.
@@ -71,24 +71,42 @@ def generate_payslip_pdf(run: PayrollRun, employee: User) -> str:
     month_name = datetime.strptime(str(run.payroll_month), "%m").strftime("%B")
     Story.append(Paragraph(f"<b>Payslip for the month of {month_name} {run.payroll_year}</b>", subtitle_style))
     
+    # Extract Employment Data safely
+    dept_name = employee.employment.department.name if employee.employment and employee.employment.department else "University Staff"
+    designation = employee.employment.designation if employee.employment and employee.employment.designation else (str(employee.role).replace("_", " ").title() if employee.role else "N/A")
+    doj = employee.employment.join_date.strftime("%d-%b-%Y") if employee.employment and employee.employment.join_date else "N/A"
+    
+    # Extract Financial Data safely
+    fin = employee.financials
+    pan = fin.pan_number if fin and fin.pan_number else "Not Provided"
+    uan = fin.uan_number if fin and fin.uan_number else "Not Provided"
+    bank_name = fin.bank_name if fin and fin.bank_name else "Not Provided"
+    acc_no = fin.bank_account_number if fin and fin.bank_account_number else "Not Provided"
+    ifsc = fin.ifsc_code if fin and fin.ifsc_code else "Not Provided"
+
     # --- Employee Details ---
     employee_data = [
         ["Employee Name:", f"{employee.first_name} {employee.last_name}", "Employee ID:", employee.employee_id or "N/A"],
-        ["Email:", employee.email, "Department:", "University Staff"],
-        ["Role:", str(employee.role).replace("_", " ").title() if employee.role else "N/A", "Status:", run.status]
+        ["Email:", employee.email, "Department:", dept_name],
+        ["Designation:", designation, "Date of Joining:", doj],
+        ["Status:", run.status, "", ""]
     ]
     
     # --- Statutory Details ---
     # We display them under the employee info if available
     employee_data.append([
-        "PAN:", employee.pan_number or "Not Provided",
-        "UAN:", employee.uan_number or "Not Provided"
+        "PAN:", pan,
+        "UAN:", uan
     ])
     
-    if employee.bank_name or employee.bank_account_number:
+    if fin and (fin.bank_name or fin.bank_account_number or fin.ifsc_code):
         employee_data.append([
-            "Bank Name:", employee.bank_name or "Not Provided",
-            "Account No:", employee.bank_account_number or "Not Provided"
+            "Bank Name:", bank_name,
+            "Account No:", acc_no
+        ])
+        employee_data.append([
+            "IFSC Code:", ifsc,
+            "", ""
         ])
     
     emp_table = Table(employee_data, colWidths=[1.5*inch, 2.5*inch, 1.5*inch, 1.5*inch])
@@ -189,7 +207,8 @@ def generate_payslip_pdf(run: PayrollRun, employee: User) -> str:
     Story.append(Spacer(1, 30))
     
     # --- Footer ---
-    Story.append(Paragraph("<i>This is a system-generated payslip and does not require a physical signature.</i>", 
+    footer_text = f"<i>Prepared by: {creator_name} | This is a system-generated payslip and does not require a physical signature.</i>"
+    Story.append(Paragraph(footer_text, 
                            ParagraphStyle('Footer', parent=styles['Normal'], alignment=1, textColor=colors.gray)))
 
     # Build the PDF

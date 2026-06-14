@@ -2,15 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-/**
- * ProtectedRoute — guards routes based on auth state and optional role list.
- *
- * - During bootstrap (loading=true), shows a spinner rather than redirecting
- *   so users with valid refresh cookies don't get kicked to /login
- * - After bootstrap, checks user object (in-memory, not localStorage)
- * - If roles prop is provided, checks hasRole against the normalized role list
- *   (which includes DIRECTOR alias for any legacy 'hod'/'department_head' checks)
- */
+
 export default function ProtectedRoute({ children, roles }) {
   const { user, loading, canAccess } = useAuth();
   const location = useLocation();

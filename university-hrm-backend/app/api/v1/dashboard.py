@@ -15,9 +15,10 @@ from app.db.models.user import User
 from app.db.models.attendance import Attendance
 from app.db.models.leave_request import LeaveRequest
 from app.db.models.onboarding import OnboardingEmployee
-from app.db.models.payroll import Payslip
+from app.db.models.payroll import PayrollRun, Payslip
 from app.db.models.performance import AppraisalCycle, PerformanceGoal
 from app.db.models.announcement import Announcement
+from app.services.encryption_service import decrypt_value
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -57,11 +58,11 @@ async def get_dashboard(
 
     # Draft payslips this month
     draft_payslips = await db.scalar(
-        select(func.count(Payslip.id)).where(
+        select(func.count(PayrollRun.id)).where(
             and_(
-                Payslip.month == today.month,
-                Payslip.year == today.year,
-                Payslip.status == "DRAFT",  # enum fix
+                PayrollRun.payroll_month == today.month,
+                PayrollRun.payroll_year == today.year,
+                PayrollRun.status == "Draft",  # enum fix
             )
         )
     ) or 0
@@ -131,9 +132,9 @@ async def get_employee_dashboard(
 
     # My latest payslip
     payslip_result = await db.execute(
-        select(Payslip.month, Payslip.year, Payslip.net_salary, Payslip.status)
-        .where(Payslip.employee_id == current_user.id)
-        .order_by(Payslip.year.desc(), Payslip.month.desc())
+        select(PayrollRun.payroll_month, PayrollRun.payroll_year, PayrollRun.net_salary, PayrollRun.status)
+        .where(PayrollRun.employee_id == current_user.id)
+        .order_by(PayrollRun.payroll_year.desc(), PayrollRun.payroll_month.desc())
         .limit(1)
     )
     latest_payslip = payslip_result.fetchone()
@@ -157,7 +158,7 @@ async def get_employee_dashboard(
         "latest_payslip": {
             "month": latest_payslip[0],
             "year": latest_payslip[1],
-            "net_salary": float(latest_payslip[2]),
+            "net_salary": decrypt_value(latest_payslip[2]) if latest_payslip[2] else 0.0,
             "status": latest_payslip[3],
         } if latest_payslip else None,
         "today_attendance": {

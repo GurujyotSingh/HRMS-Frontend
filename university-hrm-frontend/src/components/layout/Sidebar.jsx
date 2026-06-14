@@ -8,9 +8,11 @@ import {
   Briefcase, Box, Receipt, Heart, Calendar, FileText, UserSearch
 } from 'lucide-react';
 
+const ALL_STAFF_ROLES = ['admin', 'hr', 'hr_staff', 'director', 'accountant', 'faculty', 'staff', 'employee'];
+
 const NAV_ITEMS = [
   { section: 'Main' },
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ALL_STAFF_ROLES },
 
   { section: 'Management' },
   { path: '/employees', label: 'Employees', icon: Users, roles: ['admin', 'hr', 'hr_staff'] },
@@ -18,17 +20,17 @@ const NAV_ITEMS = [
   { path: '/recruitment', label: 'Recruitment', icon: UserSearch, roles: ['admin', 'hr', 'hr_staff'] },
 
   { section: 'Operations' },
-  { path: '/leaves', label: 'Leaves', icon: CalendarDays },
-  { path: '/attendance', label: 'Attendance', icon: Clock },
-  { path: '/payroll', label: 'Payroll', icon: Wallet },
-  { path: '/onboarding', label: 'Onboarding', icon: ClipboardList },
-  { path: '/performance', label: 'Performance', icon: Target },
+  { path: '/leaves', label: 'Leaves', icon: CalendarDays, roles: ALL_STAFF_ROLES },
+  { path: '/attendance', label: 'Attendance', icon: Clock, roles: ALL_STAFF_ROLES },
+  { path: '/payroll', label: 'Payroll', icon: Wallet, roles: ALL_STAFF_ROLES },
+  { path: '/onboarding', label: 'Onboarding', icon: ClipboardList, roles: ALL_STAFF_ROLES },
+  { path: '/performance', label: 'Academic Evaluations', icon: Target, roles: ALL_STAFF_ROLES },
 
   { section: 'Communication' },
-  { path: '/announcements', label: 'Announcements', icon: Megaphone },
+  { path: '/announcements', label: 'Announcements', icon: Megaphone, roles: ALL_STAFF_ROLES },
 
   { section: 'Intelligence' },
-  { path: '/chat', label: 'AI Assistant', icon: MessageSquare },
+  { path: '/chat', label: 'AI Assistant', icon: MessageSquare, roles: ALL_STAFF_ROLES },
 
   { section: 'Admin' },
   { path: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'hr', 'director'] },
@@ -123,6 +125,15 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     z-index: 1;
     rotate: 90deg;
   }
+
+  /* Hide scrollbar for sidebar nav */
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
 `}</style>
 
       {/* ── Logo ──────────────────────────────────────────── */}
@@ -136,25 +147,13 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
         minHeight: 72,
         flexShrink: 0,
       }}>
-        <div style={{
-          width: 38, height: 38, borderRadius: 10,
-          background: 'linear-gradient(135deg, var(--secondary) 0%, #ff8c00 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-          boxShadow: '0 4px 14px rgba(255,172,12,0.35)',
-        }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1760" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
-        </div>
 
-        <div style={{ 
-          opacity: collapsed ? 0 : 1, 
-          transition: 'opacity 0.2s', 
-          overflow: 'hidden', 
+
+
+        <div style={{
+          opacity: collapsed ? 0 : 1,
+          transition: 'opacity 0.2s',
+          overflow: 'hidden',
           textAlign: 'left',
           whiteSpace: 'nowrap'
         }}>
@@ -240,8 +239,8 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 strokeWidth={isActive ? 2.5 : 1.8}
                 style={{ flexShrink: 0 }}
               />
-              <span style={{ 
-                opacity: collapsed ? 0 : 1, 
+              <span style={{
+                opacity: collapsed ? 0 : 1,
                 transition: 'opacity 0.2s',
                 whiteSpace: 'nowrap'
               }}>
@@ -255,6 +254,6 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       {/* User Profile & Collapse Toggle - mirrored similarly */}
       {/* ... (I can add the full mirrored bottom part if you want) ... */}
 
-    </aside>
+    </aside >
   );
 }

@@ -40,7 +40,7 @@ async def list_payrolls(
     current_user: User = Depends(get_current_user),
 ):
     # Enforce access
-    is_privileged = current_user.role and current_user.role.lower() in ["hr", "hr_manager", "hr_staff", "admin", "super_admin", "finance"]
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "hr_manager", "hr_staff", "admin", "super_admin", "finance", "accountant"]
     if not is_privileged:
         employee_id = current_user.id
         
@@ -59,7 +59,7 @@ async def list_employee_payrolls(
     if emp_id == "me":
         emp_id = current_user.id
 
-    is_privileged = current_user.role and current_user.role.lower() in ["hr", "hr_manager", "hr_staff", "admin", "super_admin", "finance"]
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "hr_manager", "hr_staff", "admin", "super_admin", "finance", "accountant"]
     if not is_privileged and current_user.id != emp_id:
         raise HTTPException(status_code=403, detail="Not authorized")
         
@@ -77,7 +77,7 @@ async def get_payroll(
     if not run:
         raise HTTPException(status_code=404, detail="Payroll not found")
         
-    is_privileged = current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "finance"]
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "finance", "accountant"]
     if not is_privileged and run.employee_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
         
@@ -178,7 +178,7 @@ async def download_payslip(
         raise HTTPException(status_code=404, detail="Payslip not found")
         
     run = await payroll_service.get_payroll(db, id)
-    is_privileged = current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "finance"]
+    is_privileged = current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "finance", "accountant"]
     if not is_privileged and run.employee_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
         

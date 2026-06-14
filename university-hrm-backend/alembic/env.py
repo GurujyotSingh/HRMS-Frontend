@@ -24,6 +24,10 @@ from app.db.models import (
     holiday,
     system_setting,
     enums,
+    address,
+    financial,
+    employment,
+    emergency_contact,
 )
 from alembic import context
 

@@ -164,11 +164,11 @@ async def submit_payroll(db: AsyncSession, payroll_id: str, remarks: Optional[st
     if not run or run.status != "Draft":
         raise ValueError("Only Draft payrolls can be submitted")
         
-    run.status = "Pending_HR_Review"
+    run.status = "Pending_Finance_Review"
     run.updated_at = datetime.utcnow()
     
-    await _create_history(db, payroll_id, "SUBMITTED", current_user.id, remarks or "Submitted to HR")
-    await audit(db, "PAYROLL_UPDATED", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=payroll_id, detail="Submitted for HR Review", request=request)
+    await _create_history(db, payroll_id, "SUBMITTED", current_user.id, remarks or "Submitted to Finance/Accountant")
+    await audit(db, "PAYROLL_UPDATED", user_id=current_user.id, user_email=current_user.email, resource="payroll", resource_id=payroll_id, detail="Submitted for Finance/Accountant Review", request=request)
     
     await db.commit()
     return run
@@ -250,12 +250,20 @@ async def generate_payslip(db: AsyncSession, payroll_id: str, current_user: User
     result = await db.execute(select(Payslip).where(Payslip.payroll_run_id == payroll_id))
     existing = result.scalar_one_or_none()
     
+    # Fetch creator name
+    creator_name = "System"
+    if run.created_by:
+        creator_result = await db.execute(select(User).where(User.id == run.created_by))
+        creator = creator_result.scalar_one_or_none()
+        if creator:
+            creator_name = f"{creator.first_name} {creator.last_name}"
+
     import os
     # Generate actual PDF file if it doesn't exist on disk
     from app.services.pdf_service import generate_payslip_pdf
     pdf_path = None
     if not existing or not existing.pdf_path or not os.path.exists(f"app{existing.pdf_path}"):
-        pdf_path = generate_payslip_pdf(run, run.employee)
+        pdf_path = generate_payslip_pdf(run, run.employee, creator_name=creator_name)
         
     if existing:
         if pdf_path:

@@ -29,7 +29,7 @@ export default function Performance() {
   const [showFinalize, setShowFinalize] = useState(null);
 
   const [showCreateCycle, setShowCreateCycle] = useState(false);
-  const [cycleForm, setCycleForm] = useState({ name: '', year: new Date().getFullYear(), startDate: '', endDate: '' });
+  const [cycleForm, setCycleForm] = useState({ name: '', year: new Date().getFullYear(), start_date: '', end_date: '' });
   const [showAssignGoal, setShowAssignGoal] = useState(false);
   const [assignForm, setAssignForm] = useState({ employee_id: '', cycleId: '', title: '', description: '' });
   const [teamMembers, setTeamMembers] = useState([]);
@@ -50,9 +50,9 @@ export default function Performance() {
   const isDirector = hasRole('director');
 
   const tabs = [
-    { key: 'my', label: 'My Goals' },
+    { key: 'my', label: 'My Objectives' },
     ...(isDirector ? [{ key: 'director', label: 'Team Review' }] : []),
-    ...(isHR ? [{ key: 'all', label: 'All Goals' }] : []),
+    ...(isHR ? [{ key: 'all', label: 'All Objectives' }] : []),
   ];
 
   const loadData = async () => {
@@ -167,12 +167,12 @@ export default function Performance() {
     try {
       await perfAPI.createCycle({
         name: cycleForm.name,
-        startDate: cycleForm.startDate,
-        endDate: cycleForm.endDate,
+        start_date: cycleForm.start_date,
+        end_date: cycleForm.end_date,
       });
       toast('Appraisal cycle created!', 'success');
       setShowCreateCycle(false);
-      setCycleForm({ name: '', year: new Date().getFullYear(), startDate: '', endDate: '' });
+      setCycleForm({ name: '', year: new Date().getFullYear(), start_date: '', end_date: '' });
       loadData();
     } catch (e) {
       toast(e.response?.data?.message || 'Failed to create cycle', 'error');
@@ -262,7 +262,7 @@ export default function Performance() {
   );
 
   const myCols = [
-    { key: 'title', label: 'Goal', render: (r) => (
+    { key: 'title', label: 'Academic Objective', render: (r) => (
       <div>
         <div style={{ fontWeight: 600 }}>{r.title}</div>
         <div style={{ fontSize: 13, color: 'var(--gray-500)', maxWidth: 300 }} className="truncate">{r.description || '—'}</div>
@@ -340,13 +340,13 @@ export default function Performance() {
   return (
     <>
       <PageHeader
-        title="Performance Management"
-        subtitle="Set goals, track reviews and appraisal ratings"
-        actions={<Btn onClick={() => setShowCreate(true)}><Plus size={16} /> New Goal</Btn>}
+        title="Academic Evaluations"
+        subtitle="Set academic objectives, track reviews and appraisal ratings"
+        actions={<Btn onClick={() => setShowCreate(true)}><Plus size={16} /> New Objective</Btn>}
       />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600 }}>Appraisal Cycles</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 600 }}>Evaluation Cycles</h3>
         {isHR && (
           <Btn size="sm" onClick={() => setShowCreateCycle(true)}>
             <Plus size={14} /> New Cycle
@@ -358,7 +358,7 @@ export default function Performance() {
           <Card key={c.id} style={{ padding: 16, borderLeft: '4px solid var(--primary)' }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{c.name}</div>
             <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>
-              {new Date(c.startDate).toLocaleDateString()} → {new Date(c.endDate).toLocaleDateString()}
+              {new Date(c.start_date).toLocaleDateString()} → {new Date(c.end_date).toLocaleDateString()}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
               <Badge variant="success">Active</Badge>
@@ -392,16 +392,16 @@ export default function Performance() {
       </Card>
 
       {/* Create Goal Modal */}
-      <Modal open={showCreate} onClose={() => { setShowCreate(false); setAiSuggestion(''); }} title="Create Goal" width={480}>
+      <Modal open={showCreate} onClose={() => { setShowCreate(false); setAiSuggestion(''); }} title="Create Academic Objective" width={480}>
         <form onSubmit={handleCreateGoal}>
-          <Select label="Appraisal Cycle" value={goalForm.cycleId} onChange={(e) => setGoalForm({ ...goalForm, cycleId: e.target.value })} required id="goal-cycle">
+          <Select label="Evaluation Cycle" value={goalForm.cycleId} onChange={(e) => setGoalForm({ ...goalForm, cycleId: e.target.value })} required id="goal-cycle">
             <option value="">Select Cycle</option>
             {cycles.filter(c => c.isActive).map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </Select>
-          <Input label="Goal Title" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} required id="goal-title" />
-          <Textarea label="Goal Description" value={goalForm.description} onChange={(e) => setGoalForm({ ...goalForm, description: e.target.value })} placeholder="Describe your goal objectives and key results" required id="goal-text" />
+          <Input label="Objective Title (e.g. Research Paper)" value={goalForm.title} onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })} required id="goal-title" />
+          <Textarea label="Description" value={goalForm.description} onChange={(e) => setGoalForm({ ...goalForm, description: e.target.value })} placeholder="Describe your publications, grants, or teaching goals" required id="goal-text" />
           
           <div style={{ margin: '12px 0' }}>
             <Btn type="button" variant="ghost" size="sm" onClick={handleEnhanceGoal} loading={aiLoading}>
@@ -477,8 +477,8 @@ export default function Performance() {
         <form onSubmit={handleCreateCycle}>
           <Input label="Cycle Title" placeholder="e.g. Q1 2026 Performance" value={cycleForm.name} onChange={(e) => setCycleForm({ ...cycleForm, name: e.target.value })} required id="cycle-title" />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <Input label="Start Date" type="date" value={cycleForm.startDate} onChange={(e) => setCycleForm({ ...cycleForm, startDate: e.target.value })} required id="cycle-start" />
-            <Input label="End Date" type="date" min={cycleForm.startDate} value={cycleForm.endDate} onChange={(e) => setCycleForm({ ...cycleForm, endDate: e.target.value })} required id="cycle-end" />
+            <Input label="Start Date" type="date" value={cycleForm.start_date} onChange={(e) => setCycleForm({ ...cycleForm, start_date: e.target.value })} required id="cycle-start" />
+            <Input label="End Date" type="date" min={cycleForm.start_date} value={cycleForm.end_date} onChange={(e) => setCycleForm({ ...cycleForm, end_date: e.target.value })} required id="cycle-end" />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
             <Btn variant="secondary" onClick={() => setShowCreateCycle(false)}>Cancel</Btn>

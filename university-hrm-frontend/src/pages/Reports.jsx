@@ -25,7 +25,11 @@ export default function Reports() {
     else if (tab === 'leaves') promise = reportsAPI.leaveStats();
 
     promise.then(res => {
-      setData(res.data || []);
+      if (tab === 'payroll' && res.data?.by_department) {
+        setData(res.data.by_department);
+      } else {
+        setData(res.data || []);
+      }
     }).catch(err => {
       console.error(err);
       setData([]);
@@ -79,10 +83,10 @@ export default function Reports() {
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--gray-200)" />
-                <XAxis dataKey={tab === 'attendance' ? 'date' : tab === 'payroll' ? 'department_name' : 'leave_type'} tick={{ fill: 'var(--gray-500)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey={tab === 'attendance' ? 'name' : tab === 'payroll' ? 'department' : 'leave_type'} tick={{ fill: 'var(--gray-500)', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: 'var(--gray-500)', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{ fill: 'var(--gray-100)' }} />
-                <Bar dataKey={tab === 'attendance' ? 'present_count' : tab === 'payroll' ? 'total_cost' : 'used_days'} fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey={tab === 'attendance' ? 'present' : tab === 'payroll' ? 'total_net' : 'used_days'} fill="var(--primary)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

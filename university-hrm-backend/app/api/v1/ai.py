@@ -65,7 +65,7 @@ async def _get_employee_full(db: AsyncSession, user_id: str):
 async def hr_chat(
     body: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         result = await run_hr_agent(
@@ -83,7 +83,7 @@ async def hr_chat(
 @router.get("/chat/sessions", response_model=list[ChatSessionRead])
 async def get_sessions(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
+    current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
         select(ChatSession)
@@ -98,7 +98,7 @@ async def get_sessions(
 async def get_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
+    current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
         select(ChatSession)
@@ -115,7 +115,7 @@ async def get_session(
 async def close_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR)),
+    current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
         select(ChatSession)

@@ -22,10 +22,19 @@ router = APIRouter(prefix="/attendance", tags=["Attendance"])
 
 # ── Pydantic Schemas ──────────────────────────────────────────────────────────
 
+class AttendanceUserOut(BaseModel):
+    id: str
+    employee_id: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class AttendanceOut(BaseModel):
     id: str
     employee_id: str
-    date: str
+    date: date
     check_in: Optional[datetime] = None
     check_out: Optional[datetime] = None
     total_hours: Optional[float] = None
@@ -39,8 +48,11 @@ class AttendanceOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+class AttendanceWithEmployeeOut(AttendanceOut):
+    employee: Optional[AttendanceUserOut] = None
+
 class AttendancePaginatedOut(BaseModel):
-    items: list[AttendanceOut]
+    items: list[AttendanceWithEmployeeOut]
     total: int
 
 
@@ -70,7 +82,7 @@ async def list_attendance(
     
     # Non-HR can only see their own attendance
     is_privileged = False
-    if current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "hr_manager", "hr_staff"]:
+    if current_user.role and current_user.role.lower() in ["hr", "admin", "super_admin", "hr_manager", "hr_staff", "accountant", "finance"]:
         is_privileged = True
         
     if not is_privileged:
@@ -88,11 +100,12 @@ async def list_attendance(
         query = query.where(Attendance.date == date_val)
         
     # Count total
-    count_query = select(func.count(Attendance.id)).select_from(query.subquery())
+    count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query) or 0
     
     # Get items
-    query = query.order_by(Attendance.date.desc(), Attendance.check_in.desc()).offset(skip).limit(limit)
+    from sqlalchemy.orm import selectinload
+    query = query.options(selectinload(Attendance.employee)).order_by(Attendance.date.desc(), Attendance.check_in.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     items = result.scalars().all()
     
@@ -145,10 +158,10 @@ async def my_attendance(
 
 # ── HR routes ─────────────────────────────────────────────────────────────────
 
-@router.get("/hr/today", response_model=list[AttendanceOut])
+@router.get("/hr/today", response_model=list[AttendanceWithEmployeeOut])
 async def hr_today(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN, RoleEnum.ACCOUNTANT)),
 ):
     """HR: all employee attendance records for today."""
     return await attendance_service.get_all_attendance_today(db)
@@ -160,7 +173,7 @@ async def hr_employee_attendance(
     month: int = Query(..., ge=1, le=12),
     year: int = Query(..., ge=2020),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN, RoleEnum.ACCOUNTANT)),
 ):
     """HR: view a specific employee's attendance for a month."""
     return await attendance_service.get_own_attendance(db, employee_id, month, year)

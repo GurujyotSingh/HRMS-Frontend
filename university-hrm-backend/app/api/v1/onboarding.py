@@ -78,15 +78,13 @@ class ClearanceUpdate(BaseModel):
 
 # ── Employee: view own onboarding ────────────────────────────────────────────
 
-@router.get("/my", response_model=OnboardingOut)
+@router.get("/my", response_model=Optional[OnboardingOut])
 async def my_onboarding(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """View my onboarding checklist."""
     record = await onboarding_service.get_onboarding_by_employee(db, current_user.id)
-    if not record:
-        raise HTTPException(status_code=404, detail="No onboarding record found")
     return record
 
 

@@ -2,13 +2,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { chatAPI } from '../services/api';
 import { Card, Btn, Spinner, toast, Skeleton } from '../components/ui';
 import { Send, Plus, Trash2, MessageSquare, Bot, User } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 const SUGGESTIONS = [
   { text: 'Show me all pending leave requests', icon: '🏖️' },
-  { text: 'How many employees are in each department?', icon: '🏢' },
-  { text: 'What is the payroll cost for this month?', icon: '💰' },
-  { text: 'Who has the most leave days remaining?', icon: '📅' },
-  { text: 'Generate an attendance summary report', icon: '📊' },
+
 ];
 
 export default function Chat() {
@@ -68,12 +66,12 @@ export default function Chat() {
     try {
       const { data } = await chatAPI.send(text, activeSession);
 
-      const newId = data?.data?.conversationId || data?.conversationId;
-      
+      const newId = data?.data?.session_id || data?.session_id || data?.data?.conversationId || data?.conversationId;
+
       // Sync active session if this is the first message
       if (newId && newId !== activeSession) {
         setActiveSession(newId);
-        loadSessions(); 
+        loadSessions();
         return; // loadMessages will fetch the new AI response
       }
 
@@ -156,46 +154,46 @@ export default function Chat() {
             }
 
             return (
-            <div
-              key={s.id}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                padding: '10px 12px', borderRadius: '6px', cursor: 'pointer',
-                background: activeSession === s.id ? 'rgba(30, 23, 96, 0.1)' : 'transparent',
-                transition: 'background 0.1s', marginBottom: 2,
-              }}
-              onClick={() => setActiveSession(s.id)}
-              onMouseEnter={(e) => {
-                if (activeSession !== s.id) e.currentTarget.style.background = 'var(--gray-100)';
-              }}
-              onMouseLeave={(e) => {
-                if (activeSession !== s.id) e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  className="truncate"
-                  style={{
-                    fontSize: 13, fontWeight: activeSession === s.id ? 600 : 400,
-                    color: activeSession === s.id ? 'var(--primary)' : 'var(--text-dark)',
-                  }}
-                >
-                  <MessageSquare size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                  {chatTitle}
-                </div>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }}
+              <div
+                key={s.id}
                 style={{
-                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-500)',
-                  padding: 4, borderRadius: '4px', flexShrink: 0, opacity: 0.5, transition: 'opacity 0.15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  padding: '10px 12px', borderRadius: '6px', cursor: 'pointer',
+                  background: activeSession === s.id ? 'rgba(30, 23, 96, 0.1)' : 'transparent',
+                  transition: 'background 0.1s', marginBottom: 2,
                 }}
-                onMouseEnter={(e) => (e.target.style.opacity = '1')}
-                onMouseLeave={(e) => (e.target.style.opacity = '0.5')}
+                onClick={() => setActiveSession(s.id)}
+                onMouseEnter={(e) => {
+                  if (activeSession !== s.id) e.currentTarget.style.background = 'var(--gray-100)';
+                }}
+                onMouseLeave={(e) => {
+                  if (activeSession !== s.id) e.currentTarget.style.background = 'transparent';
+                }}
               >
-                <Trash2 size={14} />
-              </button>
-            </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    className="truncate"
+                    style={{
+                      fontSize: 13, fontWeight: activeSession === s.id ? 600 : 400,
+                      color: activeSession === s.id ? 'var(--primary)' : 'var(--text-dark)',
+                    }}
+                  >
+                    <MessageSquare size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                    {chatTitle}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-500)',
+                    padding: 4, borderRadius: '4px', flexShrink: 0, opacity: 0.5, transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={(e) => (e.target.style.opacity = '1')}
+                  onMouseLeave={(e) => (e.target.style.opacity = '0.5')}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             );
           })}
           {sessions.length === 0 && (
@@ -320,7 +318,19 @@ export default function Chat() {
                       fontSize: 14.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                     }}
                   >
-                    {msg.content}
+                    <ReactMarkdown
+                      components={{
+                        p: ({ node, ...props }) => <p style={{ margin: '0 0 10px 0' }} {...props} />,
+                        ul: ({ node, ...props }) => <ul style={{ margin: '0 0 10px 0', paddingLeft: 20 }} {...props} />,
+                        ol: ({ node, ...props }) => <ol style={{ margin: '0 0 10px 0', paddingLeft: 20 }} {...props} />,
+                        li: ({ node, ...props }) => <li style={{ marginBottom: 4 }} {...props} />,
+                        h1: ({ node, ...props }) => <h1 style={{ fontSize: 20, margin: '16px 0 8px 0' }} {...props} />,
+                        h2: ({ node, ...props }) => <h2 style={{ fontSize: 18, margin: '14px 0 8px 0' }} {...props} />,
+                        h3: ({ node, ...props }) => <h3 style={{ fontSize: 16, margin: '12px 0 8px 0' }} {...props} />,
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
                   </div>
                   {msg.role === 'user' && (
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary) 0%, #2b227c 100%)', color: 'var(--white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

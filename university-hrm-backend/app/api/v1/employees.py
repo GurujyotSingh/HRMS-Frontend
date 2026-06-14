@@ -5,13 +5,14 @@ PKs are VARCHAR UUID strings.
 """
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
@@ -28,6 +29,40 @@ router = APIRouter(prefix="/employees", tags=["Employees"])
 
 # ── Pydantic Schemas ──────────────────────────────────────────────────────────
 
+class EmployeeAddress(BaseModel):
+    street: Optional[str] = None
+    campus: Optional[str] = None
+    pincode: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+class EmployeeFinancials(BaseModel):
+    pan_number: Optional[str] = None
+    uan_number: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    bank_name: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+class EmployeeEmployment(BaseModel):
+    department_id: Optional[str] = None
+    designation: Optional[str] = None
+    staff_category: Optional[str] = None
+    employment_type: Optional[str] = None
+    salary: Optional[float] = None
+    join_date: Optional[datetime] = None
+    exit_date: Optional[datetime] = None
+    reporting_manager_id: Optional[str] = None
+    position_id: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+class EmployeeEmergencyContact(BaseModel):
+    id: Optional[str] = None
+    name: str
+    relation: str
+    phone: str
+    email: Optional[str] = None
+    model_config = {"from_attributes": True}
+
 class EmployeeOut(BaseModel):
     id: str
     employee_id: str
@@ -37,12 +72,6 @@ class EmployeeOut(BaseModel):
     work_email: str
     phone: Optional[str] = None
     role: Optional[str] = None
-    designation: Optional[str] = None
-    department_id: Optional[str] = None
-    employment_type: Optional[str] = None
-    salary: Optional[float] = None
-    join_date: Optional[datetime] = None
-    exit_date: Optional[datetime] = None
     status: Optional[str] = None
     gender: Optional[str] = None
     date_of_birth: Optional[datetime] = None
@@ -50,27 +79,15 @@ class EmployeeOut(BaseModel):
     profile_photo: Optional[str] = None
     bio: Optional[str] = None
     skills: Optional[List[str]] = None
-    street: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
-    pincode: Optional[str] = None
-    campus: Optional[str] = None
-    emergency_name: Optional[str] = None
-    emergency_relation: Optional[str] = None
-    emergency_phone: Optional[str] = None
-    
-    pan_number: Optional[str] = None
-    uan_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    bank_account_number: Optional[str] = None
-    ifsc_code: Optional[str] = None
-    emergency_phone: Optional[str] = None
-    emergency_email: Optional[str] = None
-    reporting_manager_id: Optional[str] = None
-    position_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
+    needs_password_change: Optional[bool] = False
+    
+    address: Optional[EmployeeAddress] = None
+    financials: Optional[EmployeeFinancials] = None
+    employment: Optional[EmployeeEmployment] = None
+    emergency_contacts: Optional[List[EmployeeEmergencyContact]] = None
 
     model_config = {"from_attributes": True}
 
@@ -82,34 +99,18 @@ class EmployeeCreateIn(BaseModel):
     first_name: str
     last_name: str
     employee_id: Optional[str] = None
-    join_date: Optional[datetime] = None
-    department_id: Optional[str] = None
-    designation: Optional[str] = None
-    employment_type: Optional[str] = None
-    pan_number: Optional[str] = None
-    uan_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    bank_account_number: Optional[str] = None
-    ifsc_code: Optional[str] = None
+    
+    address: Optional[EmployeeAddress] = None
+    financials: Optional[EmployeeFinancials] = None
+    employment: Optional[EmployeeEmployment] = None
+    emergency_contacts: Optional[List[EmployeeEmergencyContact]] = None
 
 
 class EmployeeUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
-    designation: Optional[str] = None
-    department_id: Optional[str] = None
-    employment_type: Optional[str] = None
     role: Optional[str] = None
-    pan_number: Optional[str] = None
-    uan_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    bank_account_number: Optional[str] = None
-    ifsc_code: Optional[str] = None
-    employment_type: Optional[str] = None
-    salary: Optional[float] = None
-    join_date: Optional[datetime] = None
-    exit_date: Optional[datetime] = None
     status: Optional[str] = None
     gender: Optional[str] = None
     date_of_birth: Optional[datetime] = None
@@ -117,25 +118,11 @@ class EmployeeUpdate(BaseModel):
     profile_photo: Optional[str] = None
     bio: Optional[str] = None
     skills: Optional[List[str]] = None
-    street: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
-    pincode: Optional[str] = None
-    campus: Optional[str] = None
-    emergency_name: Optional[str] = None
-    emergency_relation: Optional[str] = None
-    emergency_phone: Optional[str] = None
     
-    pan_number: Optional[str] = None
-    uan_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    bank_account_number: Optional[str] = None
-    ifsc_code: Optional[str] = None
-    emergency_email: Optional[str] = None
-    reporting_manager_id: Optional[str] = None
-    position_id: Optional[str] = None
-
+    address: Optional[EmployeeAddress] = None
+    financials: Optional[EmployeeFinancials] = None
+    employment: Optional[EmployeeEmployment] = None
+    emergency_contacts: Optional[List[EmployeeEmergencyContact]] = None
 
 class EmployeePaginatedOut(BaseModel):
     items: List[EmployeeOut]
@@ -314,11 +301,15 @@ async def export_employees_csv(
     ])
     
     for emp in items:
+        department_id = emp.employment.department_id if emp.employment else ""
+        join_date = emp.employment.join_date.strftime("%Y-%m-%d") if emp.employment and emp.employment.join_date else ""
+        employment_type = emp.employment.employment_type if emp.employment else ""
+        
         writer.writerow([
             emp.employee_id, emp.first_name, emp.last_name, emp.email, emp.role,
-            emp.department_id, emp.status, 
-            emp.join_date.strftime("%Y-%m-%d") if emp.join_date else "", 
-            emp.employment_type
+            department_id, emp.status, 
+            join_date, 
+            employment_type
         ])
         
     output.seek(0)
@@ -342,20 +333,25 @@ async def bulk_action(
             continue
             
         if body.action == "update_status" and body.value:
-            employee.status = body.value
+            employee.status = body.value.upper()
             success_count += 1
         elif body.action == "update_department" and body.value:
-            employee.department_id = body.value
+            from app.db.models.employment import UserEmployment
+            employment = await db.scalar(select(UserEmployment).where(UserEmployment.user_id == emp_id))
+            if employment:
+                employment.department_id = body.value
+            else:
+                db.add(UserEmployment(user_id=emp_id, department_id=body.value))
             success_count += 1
         elif body.action == "update_role" and body.value:
-            employee.role = body.value
+            employee.role = body.value.upper()
             success_count += 1
         elif body.action == "delete":
             # Just a soft delete or deactivate for now, deleting users fully is dangerous
             employee.status = "INACTIVE"
             success_count += 1
             
-        employee.updated_at = datetime.now()
+        employee.updated_at = datetime.now(timezone.utc)
         
     if success_count > 0:
         await db.commit()

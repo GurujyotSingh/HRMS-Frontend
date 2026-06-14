@@ -17,12 +17,13 @@ You are an intelligent HR assistant for a University HRM system.
 You help HR staff manage employees, leaves, attendance, payroll, onboarding, and performance.
 
 RULES:
-1. You can READ and UPDATE data freely. No confirmation is required.
-2. Never perform DELETE ALL, DROP, TRUNCATE, or bulk destructive operations.
+1. You are a READ-ONLY informational assistant. You CANNOT mutate, update, or delete any data.
+2. DO NOT provide highly sensitive information like salaries, financial data, or sensitive performance ratings to standard users. Provide generic/public information (names, IDs, departments, leave dates, onboarding status).
 3. Be concise and professional. Use bullet points for lists.
 4. If you don't have enough info, ask for it.
 6. Always use the available tools to fetch real data — never make up numbers.
 7. When displaying employee data, always show name + ID together.
+8. NEVER guess or hallucinate integer IDs (like department_id or employee_id). If the user provides a string (e.g. a name), DO NOT pass it as an integer ID parameter. Call tools without optional parameters if you don't know the exact numeric ID.
 
 DATABASE SCHEMA:
 - users (id, employee_id, email, first_name, last_name, role, department_id, join_date)
@@ -71,18 +72,6 @@ HR_TOOLS = [
         },
     },
     {
-        "name": "get_payroll_summary",
-        "description": "Get payroll cost summary for a given month and year",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "month": {"type": "integer"},
-                "year": {"type": "integer"},
-            },
-            "required": ["month", "year"],
-        },
-    },
-    {
         "name": "get_onboarding_status",
         "description": "Get onboarding completion status for all employees",
         "input_schema": {"type": "object", "properties": {}, "required": []},
@@ -98,225 +87,147 @@ HR_TOOLS = [
         },
     },
     {
-        "name": "approve_leave",
-        "description": "Approve a leave request by leave ID. REQUIRES confirmation.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"leave_id": {"type": "integer"}},
-            "required": ["leave_id"],
-        },
-    },
-    {
-        "name": "reject_leave",
-        "description": "Reject a leave request by leave ID. REQUIRES confirmation.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"leave_id": {"type": "integer"}},
-            "required": ["leave_id"],
-        },
-    },
-    {
         "name": "get_employee_detail",
         "description": "Get full profile of a specific employee",
         "input_schema": {
             "type": "object",
-            "properties": {"employee_id": {"type": "integer"}},
+            "properties": {"employee_id": {"type": "string"}},
             "required": ["employee_id"],
-        },
-    },
-    {
-        "name": "run_read_only_sql",
-        "description": "Run a read-only PostgreSQL SELECT query to fetch custom data not available in other tools.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "sql_query": {"type": "string", "description": "The exact SQL SELECT query to run (must start with SELECT)."}
-            },
-            "required": ["sql_query"],
         },
     },
 ]
 
-async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_user_id: int) -> str:
+async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_user_id: str) -> str:
     """Execute tool — ALL queries use selectinload, no lazy loading anywhere."""
+    try:
+        if tool_name == "get_pending_leaves":
+            from app.db.models.leave_request import LeaveRequest
 
-    if tool_name == "get_pending_leaves":
-        from app.db.models.leave_request import LeaveRequest
-
-        result = await db.execute(
-            select(LeaveRequest)
-            .options(selectinload(LeaveRequest.employee))
-            .where(LeaveRequest.status == "PENDING")
-        )
-        leaves = result.scalars().all()
-        if not leaves:
-            return "No pending leave requests found."
-        lines = [f"Found {len(leaves)} pending leave(s):"]
-        for l in leaves:
-            emp_name = f"{l.employee.first_name} {l.employee.last_name}" if l.employee else f"Emp {l.employee_id}"
-            lines.append(
-                f"- Leave ID {l.id}: {emp_name}, {l.leave_type}, "
-                f"{l.from_date.strftime('%Y-%m-%d')} to {l.to_date.strftime('%Y-%m-%d')}, Reason: {l.reason}"
+            result = await db.execute(
+                select(LeaveRequest)
+                .options(selectinload(LeaveRequest.employee))
+                .where(LeaveRequest.status == "PENDING")
             )
-        return "\n".join(lines)
-
-    elif tool_name == "get_employee_list":
-        from app.db.models.user import User
-
-        query = (
-            select(User)
-        )
-        if tool_input.get("department_id"):
-            query = query.where(User.department_id == str(tool_input["department_id"]))
-        if tool_input.get("role"):
-            query = query.where(User.role == tool_input["role"].upper())
-
-        result = await db.execute(query)
-        employees = result.scalars().all()
-        if not employees:
-            return "No employees found."
-        lines = [f"Found {len(employees)} employee(s):"]
-        for e in employees:
-            lines.append(f"- ID {e.id}: {e.first_name} {e.last_name} | {e.role} | Dept: {e.department_id or 'None'}")
-        return "\n".join(lines)
-
-    elif tool_name == "get_attendance_today":
-        from app.services.attendance_service import get_all_attendance_today
-        records = await get_all_attendance_today(db)
-        if not records:
-            return "No clock-ins recorded today."
-        lines = [f"{len(records)} employee(s) clocked in today:"]
-        for r in records:
-            clock_out = r.clock_out.strftime("%H:%M") if r.clock_out else "Not clocked out"
-            late = " ⚠️ LATE" if r.is_late else ""
-            lines.append(
-                f"- Employee {r.employee_id}: "
-                f"In {r.clock_in.strftime('%H:%M') if r.clock_in else 'N/A'}, "
-                f"Out {clock_out}{late}"
-            )
-        return "\n".join(lines)
-
-    elif tool_name == "get_attendance_report":
-        from app.services.attendance_service import get_monthly_summary
-        summary = await get_monthly_summary(
-            db, tool_input["employee_id"], tool_input["month"], tool_input["year"]
-        )
-        return (
-            f"Attendance for Employee {tool_input['employee_id']} "
-            f"— {tool_input['month']}/{tool_input['year']}:\n"
-            f"- Present: {summary.total_days_present} days\n"
-            f"- Absent: {summary.total_days_absent} days\n"
-            f"- Late: {summary.total_days_late} days\n"
-            f"- On Leave: {summary.total_days_on_leave} days\n"
-            f"- Total Hours: {summary.total_hours_worked}h"
-        )
-
-    elif tool_name == "get_payroll_summary":
-        from app.services.reports_service import payroll_cost_report
-        report = await payroll_cost_report(db, tool_input["month"], tool_input["year"])
-        lines = [
-            f"Payroll Summary — {tool_input['month']}/{tool_input['year']}:",
-            f"- Employees: {report.total_employees}",
-            f"- Total Gross: ₹{report.total_gross:,.2f}",
-            f"- Total Deductions: ₹{report.total_deductions:,.2f}",
-            f"- Total Net Pay: ₹{report.total_net_pay:,.2f}",
-            "\nBy Department:",
-        ]
-        for d in report.by_department:
-            lines.append(f"  • {d['department']}: {d['employee_count']} emp, Net ₹{d['total_net']:,.2f}")
-        return "\n".join(lines)
-
-    elif tool_name == "get_onboarding_status":
-        from app.services.reports_service import onboarding_report
-        report = await onboarding_report(db)
-        lines = [
-            f"Onboarding Status (Total: {report.total}):",
-            f"- Completed: {report.completed}",
-            f"- In Progress: {report.in_progress}",
-            "\nDetails:",
-        ]
-        for d in report.details:
-            lines.append(f"  • {d['employee_name']} (ID {d['employee_id']}): {d['status']}")
-        return "\n".join(lines)
-
-    elif tool_name == "get_performance_overview":
-        from app.services.performance_service import get_all_goals
-        from collections import Counter
-        goals = await get_all_goals(db, tool_input.get("cycle_id"))
-        if not goals:
-            return "No performance goals found."
-        status_counts = Counter(g.status for g in goals)
-        lines = [f"Performance Goals Overview ({len(goals)} total):"]
-        for status, count in status_counts.items():
-            lines.append(f"- {status}: {count}")
-        return "\n".join(lines)
-
-    elif tool_name == "get_employee_detail":
-        from app.db.models.user import User
-
-        result = await db.execute(
-            select(User)
-            .where(User.id == str(tool_input["employee_id"]))
-            .limit(1)
-        )
-        emp = result.scalar_one_or_none()
-        if not emp:
-            return f"No employee found with ID {tool_input['employee_id']}"
-            
-        return (
-            f"Employee: {emp.first_name} {emp.last_name}\n"
-            f"- ID: {emp.id} | Code: {emp.employee_id}\n"
-            f"- Role: {emp.role}\n"
-            f"- Department ID: {emp.department_id or 'Not assigned'}\n"
-            f"- Joined: {emp.join_date}\n"
-            f"- Email: {emp.email}"
-        )
-
-    elif tool_name == "approve_leave":
-        from app.services.leave_service import process_by_hr
-        leave = await process_by_hr(db, tool_input["leave_id"], hr_user_id, "approve")
-        return f"✅ Leave ID {leave.id} approved. Status: {leave.status}"
-
-    elif tool_name == "reject_leave":
-        from app.services.leave_service import process_by_hr
-        leave = await process_by_hr(db, tool_input["leave_id"], hr_user_id, "reject")
-        return f"❌ Leave ID {leave.id} rejected. Status: {leave.status}"
-
-    elif tool_name == "run_read_only_sql":
-        from sqlalchemy import text
-        sql = tool_input["sql_query"].strip()
-        
-        # Enforce strict limiting in SQL to prevent memory bloat
-        if "limit" not in sql.lower():
-            sql = sql.rstrip(";") + " LIMIT 50;"
-            
-        if not sql.lower().startswith("select"):
-            return "Error: Only SELECT queries are allowed for security reasons."
-        if any(bad in sql.lower() for bad in ["drop", "delete", "update", "insert", "truncate", "alter", ";", "--"]):
-            return "Error: Destructive SQL commands are strictly prohibited."
-        
-        try:
-            result = await db.execute(text(sql))
-            rows = result.fetchall()
-            keys = result.keys()
-            if not rows:
-                return "Query returned no results."
-            
-            lines = [f"Found {len(rows)} rows. Columns: {', '.join(keys)}"]
-            # Limit output length to prevent max_token overwhelm
-            for row in rows[:25]:
-                lines.append(str(dict(zip(keys, row))))
-            if len(rows) > 25:
-                lines.append("... (truncated to 25 rows)")
+            leaves = result.scalars().all()
+            if not leaves:
+                return "No pending leave requests found."
+            lines = [f"Found {len(leaves)} pending leave(s):"]
+            for l in leaves:
+                emp_name = f"{l.employee.first_name} {l.employee.last_name}" if l.employee else f"Emp {l.employee_id}"
+                lines.append(
+                    f"- Leave ID {l.id}: {emp_name}, {l.leave_type}, "
+                    f"{l.from_date.strftime('%Y-%m-%d')} to {l.to_date.strftime('%Y-%m-%d')}, Reason: {l.reason}"
+                )
             return "\n".join(lines)
-        except Exception as e:
-            return f"SQL execution error: {str(e)}"
 
-    return f"Unknown tool: {tool_name}"
+        elif tool_name == "get_employee_list":
+            from app.db.models.user import User
 
+            query = (
+                select(User)
+            )
+            if tool_input.get("department_id"):
+                query = query.where(User.department_id == str(tool_input["department_id"]))
+            if tool_input.get("role"):
+                query = query.where(User.role == tool_input["role"].upper())
+
+            result = await db.execute(query)
+            employees = result.scalars().all()
+            if not employees:
+                return "No employees found."
+            lines = [f"Found {len(employees)} employee(s):"]
+            for e in employees:
+                lines.append(f"- ID {e.id}: {e.first_name} {e.last_name} | {e.role} | Dept: {e.department_id or 'None'}")
+            return "\n".join(lines)
+
+        elif tool_name == "get_attendance_today":
+            from app.services.attendance_service import get_all_attendance_today
+            records = await get_all_attendance_today(db)
+            if not records:
+                return "No clock-ins recorded today."
+            lines = [f"{len(records)} employee(s) clocked in today:"]
+            for r in records:
+                clock_out = r.clock_out.strftime("%H:%M") if r.clock_out else "Not clocked out"
+                late = " ⚠️ LATE" if r.is_late else ""
+                lines.append(
+                    f"- Employee {r.employee_id}: "
+                    f"In {r.clock_in.strftime('%H:%M') if r.clock_in else 'N/A'}, "
+                    f"Out {clock_out}{late}"
+                )
+            return "\n".join(lines)
+
+        elif tool_name == "get_attendance_report":
+            from app.services.attendance_service import get_monthly_summary
+            summary = await get_monthly_summary(
+                db, tool_input["employee_id"], tool_input["month"], tool_input["year"]
+            )
+            return (
+                f"Attendance for Employee {tool_input['employee_id']} "
+                f"— {tool_input['month']}/{tool_input['year']}:\n"
+                f"- Present: {summary.total_days_present} days\n"
+                f"- Absent: {summary.total_days_absent} days\n"
+                f"- Late: {summary.total_days_late} days\n"
+                f"- On Leave: {summary.total_days_on_leave} days\n"
+                f"- Total Hours: {summary.total_hours_worked}h"
+            )
+
+        elif tool_name == "get_onboarding_status":
+            from app.services.reports_service import onboarding_report
+            report = await onboarding_report(db)
+            lines = [
+                f"Onboarding Status (Total: {report.total}):",
+                f"- Completed: {report.completed}",
+                f"- In Progress: {report.in_progress}",
+                "\nDetails:",
+            ]
+            for d in report.details:
+                lines.append(f"  • {d['employee_name']} (ID {d['employee_id']}): {d['status']}")
+            return "\n".join(lines)
+
+        elif tool_name == "get_performance_overview":
+            from app.services.performance_service import get_all_goals
+            from collections import Counter
+            goals = await get_all_goals(db, tool_input.get("cycle_id"))
+            if not goals:
+                return "No performance goals found."
+            status_counts = Counter(g.status for g in goals)
+            lines = [f"Performance Goals Overview ({len(goals)} total):"]
+            for status, count in status_counts.items():
+                lines.append(f"- {status}: {count}")
+            return "\n".join(lines)
+
+        elif tool_name == "get_employee_detail":
+            from app.db.models.user import User
+
+            emp_id_val = str(tool_input["employee_id"])
+            
+            query = select(User)
+            if emp_id_val.isdigit():
+                query = query.where(User.id == int(emp_id_val))
+            else:
+                query = query.where(User.employee_id == emp_id_val)
+                
+            result = await db.execute(query.limit(1))
+            emp = result.scalar_one_or_none()
+            if not emp:
+                return f"No employee found with ID {tool_input['employee_id']}"
+                
+            return (
+                f"Employee: {emp.first_name} {emp.last_name}\n"
+                f"- ID: {emp.id} | Code: {emp.employee_id}\n"
+                f"- Role: {emp.role}\n"
+                f"- Department ID: {emp.department_id or 'Not assigned'}\n"
+                f"- Joined: {emp.join_date}\n"
+                f"- Email: {emp.email}"
+            )
+
+        return f"Unknown tool: {tool_name}"
+    except Exception as e:
+        print(f"[Tool Error] {tool_name}: {str(e)}")
+        return f"Error executing tool {tool_name}: {str(e)}"
 
 async def get_or_create_session(
-    db: AsyncSession, user_id: int, session_id: int | None = None
+    db: AsyncSession, user_id: str, session_id: str | None = None
 ) -> ChatSession:
     if session_id:
         result = await db.execute(
@@ -344,7 +255,7 @@ async def get_or_create_session(
 
 async def _save_message(
     db: AsyncSession,
-    session_id: int,
+    session_id: str,
     role: str,
     content: str,
     agent: str = "hr_command",
@@ -370,8 +281,8 @@ async def _save_message(
 async def run_hr_agent(
     db: AsyncSession,
     user_message: str,
-    hr_user_id: int,
-    session_id: int | None = None,
+    hr_user_id: str,
+    session_id: str | None = None,
     confirm: bool = False,
 ) -> dict:
     session = await get_or_create_session(db, hr_user_id, session_id)
@@ -406,7 +317,7 @@ async def run_hr_agent(
         await _save_message(db, session.id, "assistant", msg)
         return {
             "response": msg,
-            "session_id": session.id,
+            "session_id": str(session.id),
             "requires_confirmation": False,
             "pending_action": None,
             "llm_used": "blocked",
@@ -416,7 +327,7 @@ async def run_hr_agent(
         await _save_message(db, session.id, "assistant", err)
         return {
             "response": err,
-            "session_id": session.id,
+            "session_id": str(session.id),
             "requires_confirmation": False,
             "pending_action": None,
             "llm_used": "error",
@@ -450,7 +361,7 @@ async def run_hr_agent(
         )
         return {
             "response": response_text,
-            "session_id": session.id,
+            "session_id": str(session.id),
             "requires_confirmation": False,
             "pending_action": None,
             "llm_used": llm_result["llm"],
@@ -468,7 +379,7 @@ async def run_hr_agent(
     )
     return {
         "response": response_text,
-        "session_id": session.id,
+        "session_id": str(session.id),
         "requires_confirmation": False,
         "pending_action": None,
         "llm_used": llm_result["llm"],

@@ -3,15 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Input, Btn, toast } from '../components/ui';
 import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 
-// Development helper — quick-fill credentials
-const DEMO_ACCOUNTS = [
-  { label: 'Admin',    email: 'super@university.edu',         role: 'SUPER_ADMIN' },
-  { label: 'HR Mgr',  email: 'hr.manager@university.edu',    role: 'HR_MANAGER' },
-  { label: 'Director', email: 'director.cs@university.edu',  role: 'DIRECTOR' },
-  { label: 'Faculty',  email: 'faculty1@university.edu',     role: 'FACULTY' },
-  { label: 'Staff',    email: 'staff1@university.edu',       role: 'STAFF' },
-];
-const DEMO_PASSWORD = 'Admin@123';
+
 
 export default function Login() {
   const { login, loading } = useAuth();
@@ -32,10 +24,7 @@ export default function Login() {
     }
   };
 
-  const fillDemo = (acc) => {
-    setEmail(acc.email);
-    setPassword(DEMO_PASSWORD);
-  };
+
 
   return (
     <div className="login-page">
@@ -122,32 +111,7 @@ export default function Login() {
           </Btn>
         </form>
 
-        {/* Dev helper — demo accounts */}
-        {process.env.NODE_ENV === 'development' && (
-          <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-            <div style={{ fontSize: 11, color: 'var(--gray-500)', textAlign: 'center', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
-              Dev quick-login (all: Admin@123)
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
-              {DEMO_ACCOUNTS.map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => fillDemo(acc)}
-                  style={{
-                    padding: '4px 10px', fontSize: 11, borderRadius: 4, border: '1px solid var(--border)',
-                    background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--sidebar-active)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  {acc.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   );

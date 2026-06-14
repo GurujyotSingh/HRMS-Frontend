@@ -28,6 +28,7 @@ from app.api.v1.dashboard import router as dashboard_router
 
 # Phase 3 — Recruitment
 from app.api.v1.recruitment import router as recruitment_router
+from app.api.v1.public_careers import router as public_careers_router
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -42,6 +43,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://localhost:8000"],
+    allow_origin_regex="https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,6 +76,7 @@ app.include_router(dashboard_router,      prefix="/api/v1")
 
 # Phase 3 — Recruitment
 app.include_router(recruitment_router,    prefix="/api/v1")
+app.include_router(public_careers_router, prefix="/api/v1")
 
 import os
 # Ensure static directory exists

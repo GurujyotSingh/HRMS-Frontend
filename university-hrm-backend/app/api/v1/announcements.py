@@ -31,7 +31,7 @@ class AnnouncementCreate(BaseModel):
     expires_at: Optional[datetime] = None
 
 
-class AnnouncementRead(BaseModel):
+class AnnouncementOut(BaseModel):
     id: str
     title: str
     body: str
@@ -49,7 +49,7 @@ class AnnouncementRead(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=list[AnnouncementRead])
+@router.get("", response_model=list[AnnouncementOut])
 async def list_announcements(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -79,13 +79,13 @@ async def list_announcements(
 
     out = []
     for a in announcements:
-        d = AnnouncementRead.model_validate(a)
+        d = AnnouncementOut.model_validate(a)
         d.is_read = a.id in read_ids
         out.append(d)
     return out
 
 
-@router.post("/", response_model=AnnouncementRead)
+@router.post("", response_model=AnnouncementOut)
 async def create_announcement(
     data: AnnouncementCreate,
     current_user: User = Depends(require_role("hr", "admin")),
@@ -108,7 +108,7 @@ async def create_announcement(
     db.add(ann)
     await db.commit()
     await db.refresh(ann)
-    d = AnnouncementRead.model_validate(ann)
+    d = AnnouncementOut.model_validate(ann)
     d.is_read = False
     return d
 
