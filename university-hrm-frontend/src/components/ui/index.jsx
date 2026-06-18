@@ -616,20 +616,7 @@ export function Table({
     );
   }
   if (!rows?.length) {
-    return (
-      <div
-        style={{
-          padding: '56px 24px',
-          textAlign: 'center',
-          color: 'var(--gray-500)',
-          fontSize: 13,
-        }}
-      >
-        <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.35 }}>📋</div>
-        <p style={{ fontWeight: 500, color: 'var(--text-light)', marginBottom: 2 }}>{emptyMsg}</p>
-        <p style={{ fontSize: 12, color: 'var(--gray-500)' }}>Records will appear here when available</p>
-      </div>
-    );
+    return <EmptyState title={emptyMsg} message="Records will appear here when available" />;
   }
 
   const allSelected = rows.length > 0 && selectedRows.length === rows.length;

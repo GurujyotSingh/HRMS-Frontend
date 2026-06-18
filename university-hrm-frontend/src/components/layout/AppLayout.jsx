@@ -83,10 +83,11 @@ export default function AppLayout({ children }) {
         return;
       }
       try {
-        const res = await fetch(`https://ifsc.razorpay.com/${code}`);
+        const res = await fetch(`https://bank-apis.justinclicks.com/API/V1/IFSC/${code}/`);
         if (res.ok) {
           const data = await res.json();
-          setProfileForm(p => ({ ...p, bank_name: data.BANK }));
+          const bankDetails = `${data.BANK} - ${data.BRANCH}`;
+          setProfileForm(p => ({ ...p, bank_name: bankDetails }));
           toast(`Bank found: ${data.BANK}`, 'success');
         } else {
           toast('Invalid IFSC Code. Please verify.', 'error');

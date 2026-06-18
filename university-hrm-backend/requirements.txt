@@ -16,3 +16,4 @@ reportlab>=4.0.0
 python-multipart==0.0.9
 groq
 tenacity
+PyPDF2==3.0.1

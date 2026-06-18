@@ -96,8 +96,9 @@ export function AuthProvider({ children }) {
       // HOD alias map — any legacy role string maps to its DIRECTOR equivalent
       const HOD_ALIASES = ['hod', 'department_head', 'head_of_department'];
       
-      // Map super_admin to admin for UI compatibility
-      const currentNormalized = current === 'super_admin' ? 'admin' : current;
+      // Map super_admin to admin, hr_manager/hr_staff to hr for UI compatibility
+      let currentNormalized = current === 'super_admin' ? 'admin' : current;
+      if (currentNormalized === 'hr_manager' || currentNormalized === 'hr_staff') currentNormalized = 'hr';
 
       return roles.some((r) => {
         const normalized = HOD_ALIASES.includes(r.toLowerCase()) ? 'director' : r.toLowerCase();

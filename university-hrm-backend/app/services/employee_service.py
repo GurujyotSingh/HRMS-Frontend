@@ -100,7 +100,15 @@ async def create_employee(db: AsyncSession, data: dict) -> User:
         if exists.scalar_one_or_none():
             raise ValueError("Email already registered")
 
-    # 2. Auto-generate temporary password
+    # 2. Check director constraints if role is DIRECTOR
+    if data.get("role") == "DIRECTOR" and data.get("employment") and data["employment"].get("department_id"):
+        dept_id = data["employment"]["department_id"]
+        dept_res = await db.execute(select(Department).where(Department.id == dept_id))
+        dept = dept_res.scalar_one_or_none()
+        if dept and dept.director_id:
+            raise ValueError("This department already has a director assigned.")
+
+    # 3. Auto-generate temporary password
     temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
 
 
@@ -122,6 +130,9 @@ async def create_employee(db: AsyncSession, data: dict) -> User:
         personal_email=data.get("personal_email"),
         password_hash=get_password_hash(temp_password),
         role=data.get("role") or "STAFF",
+        phone=data.get("phone"),
+        gender=data.get("gender"),
+        date_of_birth=data.get("date_of_birth"),
         status="ACTIVE",
         needs_password_change=True,
         failed_login_attempts=0,
@@ -151,8 +162,25 @@ async def create_employee(db: AsyncSession, data: dict) -> User:
         user.emergency_contacts = [UserEmergencyContact(id=str(uuid.uuid4()), name=c["name"], relation=c["relation"], phone=c["phone"], email=c.get("email")) for c in data["emergency_contacts"]]
         
     db.add(user)
+    
+    ONBOARDING_REQUIRED_ROLES = ["DIRECTOR", "FACULTY", "STAFF", "ACCOUNTANT"]
+
+    # Auto-generate onboarding record and tasks within the same transaction (only for eligible roles)
+    if user.role in ONBOARDING_REQUIRED_ROLES:
+        from app.services.onboarding_service import create_onboarding_for_employee
+        await create_onboarding_for_employee(db, user.id, commit=False)
+
     await db.commit()
     await db.refresh(user)
+    
+    # Update Department director_id if applicable
+    if data.get("role") == "DIRECTOR" and data.get("employment") and data["employment"].get("department_id"):
+        dept_id = data["employment"]["department_id"]
+        dept_res = await db.execute(select(Department).where(Department.id == dept_id))
+        dept = dept_res.scalar_one_or_none()
+        if dept:
+            dept.director_id = user.id
+            await db.commit()
     
     # Send welcome email asynchronously
     personal_email = data.get("personal_email")
@@ -177,6 +205,28 @@ async def get_employee_by_employee_id(db: AsyncSession, employee_id: str) -> Opt
 
 async def update_employee(db: AsyncSession, user: User, update_data: dict) -> User:
     """Update an employee's profile fields."""
+    
+    role = update_data.get("role", user.role)
+    status = update_data.get("status", user.status)
+    
+    dept_id = None
+    if "employment" in update_data and update_data["employment"] and "department_id" in update_data["employment"]:
+        dept_id = update_data["employment"]["department_id"]
+    elif user.employment:
+        dept_id = user.employment.department_id
+
+    if role == "DIRECTOR" and status == "ACTIVE" and dept_id:
+        dept_res = await db.execute(select(Department).where(Department.id == dept_id))
+        dept = dept_res.scalar_one_or_none()
+        if dept and dept.director_id and dept.director_id != user.id:
+            old_dir_res = await db.execute(select(User).where(User.id == dept.director_id))
+            old_dir = old_dir_res.scalar_one_or_none()
+            if old_dir and old_dir.status == "ACTIVE":
+                raise ValueError("This department already has an active director assigned.")
+            elif old_dir:
+                old_dir.role = "FACULTY"
+                db.add(old_dir)
+            
     for field, value in update_data.items():
         if field in ["address", "financials", "employment", "emergency_contacts"]:
             continue
@@ -217,4 +267,21 @@ async def update_employee(db: AsyncSession, user: User, update_data: dict) -> Us
     user.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)
+    
+    # Update Department director_id if applicable
+    if user.role == "DIRECTOR" and user.status == "ACTIVE" and dept_id:
+        dept_res = await db.execute(select(Department).where(Department.id == dept_id))
+        dept = dept_res.scalar_one_or_none()
+        if dept and dept.director_id != user.id:
+            dept.director_id = user.id
+            await db.commit()
+            
+    # Cleanup Department director_id if user is no longer an active director
+    elif (user.role != "DIRECTOR" or user.status != "ACTIVE") and dept_id:
+        dept_res = await db.execute(select(Department).where(Department.id == dept_id))
+        dept = dept_res.scalar_one_or_none()
+        if dept and dept.director_id == user.id:
+            dept.director_id = None
+            await db.commit()
+            
     return user

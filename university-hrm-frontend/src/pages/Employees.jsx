@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { employeesAPI, deptAPI } from '../services/api';
-import { toast } from '../components/ui';
+import { toast, Pagination, StatCard } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Eye, Upload, Trash2, CheckCircle, Search, FilterX, Users, UserCheck, UserX, TrendingUp, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Building2, Star, UserPlus, FileUp, MoreVertical, Phone, MapPin, Calendar, ShieldAlert, Clock, Lock } from 'lucide-react';
+import AddEmployeeWizard from '../components/employees/AddEmployeeWizard';
 
 // ─── Avatar util ────────────────────────────────────────────
 const AVATAR_COLORS = [
@@ -250,9 +251,24 @@ export default function Employees() {
         first_name: form.first_name,
         last_name: form.last_name,
         employee_id: form.employee_id,
-        address: { street: form.street, campus: form.campus, pincode: form.pincode },
-        financials: { pan_number: form.pan_number, uan_number: form.uan_number, bank_account_number: form.bank_account_number, ifsc_code: form.ifsc_code },
-        employment: { department_id: form.department_id || null, designation: form.designation || null, employment_type: form.employment_type || null, staff_category: form.staff_category || null, join_date: form.join_date || null }
+        address: { 
+          street: form.street || null, 
+          campus: form.campus || null, 
+          pincode: form.pincode || null 
+        },
+        financials: { 
+          pan_number: form.pan_number || null, 
+          uan_number: form.uan_number || null, 
+          bank_account_number: form.bank_account_number || null, 
+          ifsc_code: form.ifsc_code || null 
+        },
+        employment: { 
+          department_id: form.department_id || null, 
+          designation: form.designation || null, 
+          employment_type: form.employment_type || null, 
+          staff_category: form.staff_category || null, 
+          join_date: form.join_date || null 
+        }
       });
       toast('Employee created and credentials emailed!', 'success');
       setShowCreate(false);
@@ -276,9 +292,24 @@ export default function Employees() {
         nationality: form.nationality || null,
         profile_photo: form.profile_photo || null,
         bio: form.bio || null,
-        address: { street: form.street, campus: form.campus, pincode: form.pincode },
-        financials: { pan_number: form.pan_number, uan_number: form.uan_number, bank_account_number: form.bank_account_number, ifsc_code: form.ifsc_code },
-        employment: { department_id: form.department_id || null, designation: form.designation || null, employment_type: form.employment_type || null, staff_category: form.staff_category || null, join_date: form.join_date || null }
+        address: { 
+          street: form.street || null, 
+          campus: form.campus || null, 
+          pincode: form.pincode || null 
+        },
+        financials: { 
+          pan_number: form.pan_number || null, 
+          uan_number: form.uan_number || null, 
+          bank_account_number: form.bank_account_number || null, 
+          ifsc_code: form.ifsc_code || null 
+        },
+        employment: { 
+          department_id: form.department_id || null, 
+          designation: form.designation || null, 
+          employment_type: form.employment_type || null, 
+          staff_category: form.staff_category || null, 
+          join_date: form.join_date || null 
+        }
       };
       await employeesAPI.update(editingId, payload);
       toast('Employee updated successfully', 'success');
@@ -294,7 +325,7 @@ export default function Employees() {
     const code = form.ifsc_code;
     if (code && code.length === 11) {
       try {
-        const res = await fetch(`https://ifsc.razorpay.com/${code}`);
+        const res = await fetch(`https://bank-apis.justinclicks.com/api/${code}`);
         if (res.ok) {
           const data = await res.json();
           setForm(p => ({ ...p, bank_name: data.BANK }));
@@ -332,7 +363,9 @@ export default function Employees() {
   const handleBulk = async () => {
     setBulkLoad(true);
     try {
-      await employeesAPI.bulkAction({ employee_ids: selected, action: showBulk.type, value: bulkVal || null });
+      const apiAction = showBulk.type === 'activate' ? 'update_status' : showBulk.type;
+      const apiValue = showBulk.type === 'activate' ? 'ACTIVE' : (bulkVal || null);
+      await employeesAPI.bulkAction({ employee_ids: selected, action: apiAction, value: apiValue });
       toast(`Updated ${selected.length} employees`, 'success');
       setShowBulk(null); setSelected([]); setBulkVal(''); load();
     } catch { toast('Bulk action failed', 'error'); }
@@ -403,29 +436,11 @@ export default function Employees() {
       </div>
 
       {/* ── Stat Cards ── */}
-      <div className="emp-stats">
-        {[
-          { icon: <TrendingUp size={22} />, label: 'Total\nEmployees', val: total, bg: 'linear-gradient(135deg, #F0F4FF 0%, #E0E7FF 100%)', fg: '#887cf0ff' },
-          { icon: <Building2 size={22} />, label: 'Active', val: activeCount, bg: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)', fg: '#35b062ff' },
-          { icon: <Star size={22} />, label: 'Inactive', val: inactiveCount, bg: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)', fg: '#ac6f41ff' },
-          { icon: <UserPlus size={22} />, label: 'Departments', val: departments.length, bg: 'linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%)', fg: '#BE123C' },
-        ].map((s, i) => (
-          <div key={i} className="emp-stat-card" style={{ background: s.bg, animationDelay: `${i * 0.07}s`, border: 'none' }}>
-            <div className="emp-stat-left">
-              <div className="emp-stat-lbl" style={{ whiteSpace: 'pre-line' }}>{s.label}</div>
-              <div className="emp-stat-val">{loading ? '—' : s.val}</div>
-            </div>
-            <div className="emp-stat-right">
-              <div className="emp-stat-dots">
-                <div className="emp-stat-dot" style={{ background: s.fg, opacity: 0.8 }}></div>
-                <div className="emp-stat-dot" style={{ background: s.fg, opacity: 0.6 }}></div>
-                <div className="emp-stat-dot" style={{ background: s.fg, opacity: 0.4 }}></div>
-                <div className="emp-stat-dot" style={{ background: s.fg, opacity: 0.2 }}></div>
-              </div>
-              <div className="emp-stat-icon" style={{ background: s.fg, boxShadow: `0 4px 14px ${s.fg}40` }}>{s.icon}</div>
-            </div>
-          </div>
-        ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+        <StatCard label="Total Employees" value={loading ? '—' : total} icon={<TrendingUp />} color="#887cf0" />
+        <StatCard label="Active" value={loading ? '—' : activeCount} icon={<Building2 />} color="#35b062" />
+        <StatCard label="Inactive" value={loading ? '—' : inactiveCount} icon={<Star />} color="#ac6f41" />
+        <StatCard label="Departments" value={departments.length} icon={<UserPlus />} color="#BE123C" />
       </div>
 
       {/* ── Main Card ── */}
@@ -664,9 +679,15 @@ export default function Employees() {
                               </button>
                             )}
                             <div className="emp-row-menu-divider" />
-                            <button className="emp-row-menu-item danger" onClick={() => { setSelected([emp.id]); setShowBulk({ type: 'delete', label: 'Deactivate Employee' }); setActiveRowMenu(null); }}>
-                              <UserX size={14} /> Deactivate
-                            </button>
+                            {emp.status === 'INACTIVE' ? (
+                              <button className="emp-row-menu-item" style={{ color: 'var(--success)' }} onClick={() => { setSelected([emp.id]); setShowBulk({ type: 'activate', label: 'Activate Employee' }); setActiveRowMenu(null); }}>
+                                <CheckCircle size={14} /> Activate
+                              </button>
+                            ) : (
+                              <button className="emp-row-menu-item danger" onClick={() => { setSelected([emp.id]); setShowBulk({ type: 'delete', label: 'Deactivate Employee' }); setActiveRowMenu(null); }}>
+                                <UserX size={14} /> Deactivate
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -679,37 +700,13 @@ export default function Employees() {
         </div>
 
         {/* Pagination */}
-        <div className="emp-pagination">
-          <div className="emp-pagination-info">
-            Showing <strong>{startRow}–{endRow}</strong> of <strong>{total}</strong> employees
-          </div>
-          <div className="emp-pagination-controls">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--gray-500)' }}>
-              Rows:
-              <select className="emp-page-select" value={limit} onChange={e => { setLimit(+e.target.value); setPage(1); }}>
-                {[25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-            <div className="emp-pagination-nav">
-              <button className="emp-page-btn" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                <ChevronLeft size={14} />
-              </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let p;
-                if (totalPages <= 5) p = i + 1;
-                else if (page <= 3) p = i + 1;
-                else if (page >= totalPages - 2) p = totalPages - 4 + i;
-                else p = page - 2 + i;
-                return (
-                  <button key={p} className={`emp-page-btn${page === p ? ' active' : ''}`} onClick={() => setPage(p)}>{p}</button>
-                );
-              })}
-              <button className="emp-page-btn" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <Pagination 
+          totalCount={total} 
+          pageSize={limit} 
+          currentPage={page} 
+          onPageChange={setPage} 
+          onPageSizeChange={(newSize) => { setLimit(newSize); setPage(1); }} 
+        />
       </div>
 
       {/* ── View Profile Side Drawer ── */}
@@ -836,7 +833,7 @@ export default function Employees() {
             <button
               className={`emp-btn ${showBulk?.type === 'delete' ? 'emp-btn-danger' : 'emp-btn-primary'}`}
               onClick={handleBulk}
-              disabled={bulkLoading || (showBulk?.type === 'delete' ? bulkVal !== 'CONFIRM' : !bulkVal)}
+              disabled={bulkLoading || (showBulk?.type === 'delete' ? bulkVal !== 'CONFIRM' : showBulk?.type !== 'activate' && !bulkVal)}
             >
               {bulkLoading ? 'Processing…' : (showBulk?.type === 'delete' ? 'I understand, deactivate' : 'Confirm')}
             </button>
@@ -890,6 +887,12 @@ export default function Employees() {
             </select>
           </Field>
         )}
+        {showBulk?.type === 'activate' && (
+          <p style={{ fontSize: 14, color: 'var(--text-light)', lineHeight: 1.5, background: '#f0fdf4', padding: 16, borderRadius: 8, border: '1px solid #bbf7d0', color: '#166534' }}>
+            <CheckCircle size={16} style={{ marginBottom: -3, marginRight: 6 }} />
+            Are you sure you want to restore system access for the selected employee(s)? They will be able to log in immediately.
+          </p>
+        )}
         {showBulk?.type === 'update_department' && (
           <Field label="New Department">
             <select value={bulkVal} onChange={e => setBulkVal(e.target.value)}>
@@ -913,29 +916,30 @@ export default function Employees() {
         )}
       </EmpModal>
 
-      {/* ── Add / Edit Modal ── */}
+      <AddEmployeeWizard 
+        open={showCreate} 
+        onClose={() => setShowCreate(false)} 
+        onSuccess={() => { setShowCreate(false); load(); }} 
+      />
+
+      {/* ── Edit Modal ── */}
       <EmpModal
-        open={showCreate || showEdit} onClose={() => { setShowCreate(false); setShowEdit(false); setEditingId(null); }}
-        title={showCreate ? "Add New Employee" : "Edit Employee"} width={580}
+        open={showEdit} onClose={() => { setShowEdit(false); setEditingId(null); }}
+        title="Edit Employee" width={580}
         footer={
           <>
-            <button className="emp-btn emp-btn-secondary" onClick={() => { setShowCreate(false); setShowEdit(false); setEditingId(null); }}>Cancel</button>
-            <button className="emp-btn emp-btn-primary" form="create-form" type="submit" disabled={creating}>
-              {creating ? 'Saving…' : showCreate ? 'Create Employee' : 'Save Changes'}
+            <button className="emp-btn emp-btn-secondary" onClick={() => { setShowEdit(false); setEditingId(null); }}>Cancel</button>
+            <button className="emp-btn emp-btn-primary" form="edit-form" type="submit" disabled={creating}>
+              {creating ? 'Saving…' : 'Save Changes'}
             </button>
           </>
         }
       >
-        <form id="create-form" onSubmit={showCreate ? handleCreate : handleEdit}>
+        <form id="edit-form" onSubmit={handleEdit}>
           <div className="emp-section-label">Account details</div>
           <div className="emp-grid-2">
-            {showCreate && (
-              <Field label="Personal Email (Welcome Pack sent here)">
-                <input type="email" required placeholder="john.doe@gmail.com" value={form.personal_email || ''} onChange={e => setForm(p => ({ ...p, personal_email: e.target.value }))} />
-              </Field>
-            )}
-            <Field label={showCreate ? "University Email (Optional Override)" : "Work Email"}>
-              <input type="email" placeholder={showCreate ? "Auto-generated if left blank" : ""} value={form.email || ''} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} disabled={!showCreate} />
+            <Field label="Work Email">
+              <input type="email" value={form.email || ''} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} disabled />
             </Field>
           </div>
           <Field label="System Role">
@@ -963,8 +967,13 @@ export default function Employees() {
             <Field label="Department">
               <select value={form.department_id} onChange={e => setForm(p => ({ ...p, department_id: e.target.value }))}>
                 <option value="">Select Department</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {(form.role === 'DIRECTOR' ? departments.filter(d => !d.director_id || d.director_id === editingId) : departments).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
+              {form.role === 'DIRECTOR' && (
+                <div style={{ fontSize: 11, color: 'var(--gray-500)', marginTop: 4 }}>
+                  Only departments without an active director are shown.
+                </div>
+              )}
             </Field>
             <Field label="Designation">
               <input placeholder="e.g. Associate Professor" value={form.designation} onChange={e => setForm(p => ({ ...p, designation: e.target.value }))} />

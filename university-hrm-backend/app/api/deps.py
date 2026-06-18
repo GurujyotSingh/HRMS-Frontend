@@ -64,9 +64,16 @@ def require_role(*required_roles: RoleEnum):
         # Admin bypasses all role restrictions
         if user_role == RoleEnum.ADMIN.value or user_role == "admin" or user_role == "super_admin":
             return current_user
+        # Normalize roles for checking
+        normalized_role = user_role
+        if user_role in ("hr_manager", "hr_staff"):
+            normalized_role = "hr"
+        elif user_role in ("director", "hod"):
+            normalized_role = "department_head"
+
         # Check if user's role matches any of the required roles
         allowed = [r.value.lower() if isinstance(r, RoleEnum) else r.lower() for r in required_roles]
-        if user_role not in allowed:
+        if normalized_role not in allowed and user_role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required roles: {allowed}",

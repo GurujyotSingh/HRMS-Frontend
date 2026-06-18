@@ -99,6 +99,9 @@ class EmployeeCreateIn(BaseModel):
     first_name: str
     last_name: str
     employee_id: Optional[str] = None
+    phone: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[datetime] = None
     
     address: Optional[EmployeeAddress] = None
     financials: Optional[EmployeeFinancials] = None

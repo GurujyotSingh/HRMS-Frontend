@@ -26,6 +26,7 @@ class TaskOut(BaseModel):
     id: str
     title: str
     description: Optional[str] = None
+    assigned_to: str = "EMPLOYEE"
     is_completed: bool
     completed_at: Optional[datetime] = None
 
@@ -96,7 +97,38 @@ async def complete_my_task(
 ):
     """Mark an onboarding task as complete."""
     try:
-        return await onboarding_service.complete_onboarding_task(db, task_id, current_user.id)
+        from sqlalchemy import select
+        from app.db.models.onboarding import OnboardingTask
+        task = await db.scalar(select(OnboardingTask).where(OnboardingTask.id == task_id))
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if task.assigned_to != "EMPLOYEE":
+            raise HTTPException(status_code=403, detail="You can only complete EMPLOYEE tasks.")
+
+        task_out = await onboarding_service.complete_onboarding_task(db, task_id, current_user.id)
+        await onboarding_service.check_and_complete_onboarding(db, task.onboarding_record_id)
+        return task_out
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/hr/tasks/{task_id}/complete", response_model=TaskOut)
+async def complete_hr_task(
+    task_id: str,
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """HR/Admin: Mark any onboarding task as complete."""
+    try:
+        from sqlalchemy import select
+        from app.db.models.onboarding import OnboardingTask
+        task = await db.scalar(select(OnboardingTask).where(OnboardingTask.id == task_id))
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task_out = await onboarding_service.complete_onboarding_task(db, task_id, current_user.id)
+        await onboarding_service.check_and_complete_onboarding(db, task.onboarding_record_id)
+        return task_out
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

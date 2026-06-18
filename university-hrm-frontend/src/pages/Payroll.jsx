@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   PageHeader, Card, Table, Btn, Modal, Input, Badge, toast, Select,
 } from '../components/ui';
+import AsyncEmployeeSelect from '../components/ui/AsyncEmployeeSelect';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -634,10 +635,11 @@ export default function Payroll() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 24 }}>
               {showCreate && (
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <Select label="Select Employee" value={formData?.employee_id || ''} onChange={e => setFormData({ ...formData, employee_id: e.target.value })}>
-                    <option value="">-- Choose an Employee --</option>
-                    {(employees || []).map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.employee_id})</option>)}
-                  </Select>
+                  <AsyncEmployeeSelect 
+                    label="Select Employee" 
+                    value={formData?.employee_id || ''} 
+                    onChange={val => setFormData({ ...formData, employee_id: val })} 
+                  />
                 </div>
               )}
               <Input type="number" label="Payroll Month" placeholder="1-12" value={formData.payroll_month} onChange={e => setFormData({ ...formData, payroll_month: e.target.value })} />

@@ -5,6 +5,7 @@ import {
   PageHeader, Card, Table, Btn, Modal, Input, Textarea, Select, Badge, Tabs,
   StarRating, toast,
 } from '../components/ui';
+import AsyncEmployeeSelect from '../components/ui/AsyncEmployeeSelect';
 import { Plus, Star, Send } from 'lucide-react';
 
 const STATUS_MAP = {
@@ -490,12 +491,12 @@ export default function Performance() {
       {/* Assign Goal Modal */}
       <Modal open={showAssignGoal} onClose={() => setShowAssignGoal(false)} title="Assign Goal to Team" width={480}>
         <form onSubmit={handleAssignGoal}>
-          <Select label="Employee" value={assignForm.employee_id} onChange={(e) => setAssignForm({ ...assignForm, employee_id: e.target.value })} required id="assign-emp">
-            <option value="">Select Employee</option>
-            {teamMembers.map(emp => (
-              <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
-            ))}
-          </Select>
+          <AsyncEmployeeSelect 
+            label="Employee" 
+            value={assignForm.employee_id} 
+            onChange={(val) => setAssignForm({ ...assignForm, employee_id: val })} 
+            required 
+          />
           <Select label="Appraisal Cycle" value={assignForm.cycleId} onChange={(e) => setAssignForm({ ...assignForm, cycleId: e.target.value })} required id="assign-cycle">
             <option value="">Select Cycle</option>
             {cycles.filter(c => c.isActive).map(c => (

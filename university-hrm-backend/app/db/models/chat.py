@@ -19,7 +19,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)   # auto-generated from first message
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", nullable=False)
     # status: "ACTIVE" | "CLOSED"

@@ -29,13 +29,13 @@ class ChatSessionRead(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: Optional[str] = None   # if None, new session is created
+    session_id: Optional[int] = None   # if None, new session is created
     confirm: bool = False               # set True when confirming a destructive action
 
 
 class ChatResponse(BaseModel):
     response: str
-    session_id: str
+    session_id: int
     requires_confirmation: bool = False
     pending_action: Optional[dict] = None
     llm_used: str

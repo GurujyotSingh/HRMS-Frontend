@@ -227,7 +227,7 @@ async def execute_tool(tool_name: str, tool_input: dict, db: AsyncSession, hr_us
         return f"Error executing tool {tool_name}: {str(e)}"
 
 async def get_or_create_session(
-    db: AsyncSession, user_id: str, session_id: str | None = None
+    db: AsyncSession, user_id: str, session_id: int | None = None
 ) -> ChatSession:
     if session_id:
         result = await db.execute(
@@ -255,7 +255,7 @@ async def get_or_create_session(
 
 async def _save_message(
     db: AsyncSession,
-    session_id: str,
+    session_id: int,
     role: str,
     content: str,
     agent: str = "hr_command",
@@ -282,7 +282,7 @@ async def run_hr_agent(
     db: AsyncSession,
     user_message: str,
     hr_user_id: str,
-    session_id: str | None = None,
+    session_id: int | None = None,
     confirm: bool = False,
 ) -> dict:
     session = await get_or_create_session(db, hr_user_id, session_id)

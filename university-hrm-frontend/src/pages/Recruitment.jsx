@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
+import {
   Plus, Users, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { 
-  PageHeader, Card, Table, Badge, Btn, 
-  Modal, Input, Select, Textarea, toast, Skeleton 
+import {
+  PageHeader, Card, Table, Badge, Btn,
+  Modal, Input, Select, Textarea, toast, Skeleton
 } from '../components/ui';
 import { recruitmentAPI, deptAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import JobPostingWizard from '../components/recruitment/JobPostingWizard';
+import RecruitmentPipeline from '../components/RecruitmentPipeline';
 
 // Fixed for 1M+ rows scalability:
 // - Job listings are now server-side paginated (never loads all jobs)
@@ -19,7 +21,7 @@ const PAGE_SIZE = 25;
 
 export default function Recruitment() {
   const { canAccess } = useAuth();
-  const canManage = canAccess(['admin', 'hr']);
+  const canManage = canAccess('admin', 'hr');
 
   const [jobs, setJobs] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -27,33 +29,29 @@ export default function Recruitment() {
   const [jobSearch, setJobSearch] = useState('');
 
   // Fixed for 1M+ rows: pagination state
-  const [page, setPage]   = useState(1);
+  const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const abortRef  = useRef(null);
+  const abortRef = useRef(null);
   const searchRef = useRef(null); // Fixed: debounce timer ref
 
   // Modals
   const [jobModalOpen, setJobModalOpen] = useState(false);
   const [applicantModalOpen, setApplicantModalOpen] = useState(false);
-  
+
   // Selection state
   const [selectedJob, setSelectedJob] = useState(null);
   const [applicants, setApplicants] = useState([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
-  const [appPage, setAppPage]   = useState(1);
+  const [appPage, setAppPage] = useState(1);
   const [appTotal, setAppTotal] = useState(0);
 
   // Form states
-  const [jobForm, setJobForm] = useState({
-    title: '', department_id: '', type: 'FULL_TIME', 
-    description: '', closing_date: ''
-  });
-  
   const [applicantForm, setApplicantForm] = useState({
     name: '', email: '', phone: '', resume_url: '', notes: ''
   });
   const [showAddApplicant, setShowAddApplicant] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
 
   // Fixed for 1M+ rows: paginated job loading with AbortController
   const loadJobs = useCallback(async () => {
@@ -99,67 +97,11 @@ export default function Recruitment() {
     }, 400);
   };
 
-  const handleCreateJob = async (e) => {
-    e.preventDefault();
-    try {
-      const data = {
-        ...jobForm,
-        closing_date: new Date(jobForm.closing_date).toISOString()
-      };
-      await recruitmentAPI.createJob(data);
-      toast('Job posted successfully!', 'success');
-      setJobModalOpen(false);
-      setJobForm({ title: '', department_id: '', type: 'FULL_TIME', description: '', closing_date: '' });
-      setPage(1);
-      loadJobs();
-    } catch (err) {
-      toast('Failed to post job', 'error');
-    }
-  };
+  // handleCreateJob moved to JobPostingWizard
 
   // Fixed for 1M+ rows: applicants are paginated per job
-  const viewApplicants = async (job, newAppPage = 1) => {
+  const viewApplicants = (job) => {
     setSelectedJob(job);
-    setApplicantModalOpen(true);
-    setShowAddApplicant(false);
-    setLoadingApplicants(true);
-    setAppPage(newAppPage);
-    try {
-      const { data } = await recruitmentAPI.getApplicants(job.id, {
-        limit: 20,
-        skip: (newAppPage - 1) * 20,
-      });
-      const items = data?.data?.items || data?.items || data?.data || (Array.isArray(data) ? data : []);
-      setApplicants(items);
-      setAppTotal(data?.data?.total || data?.total || items.length);
-    } catch (err) {
-      toast('Failed to load applicants', 'error');
-    } finally {
-      setLoadingApplicants(false);
-    }
-  };
-
-  const handleAddApplicant = async (e) => {
-    e.preventDefault();
-    try {
-      await recruitmentAPI.addApplicant(selectedJob.id, applicantForm);
-      toast('Applicant added successfully!', 'success');
-      setShowAddApplicant(false);
-      setApplicantForm({ name: '', email: '', phone: '', resume_url: '', notes: '' });
-      viewApplicants(selectedJob, 1);
-    } catch (err) {
-      toast('Failed to add applicant', 'error');
-    }
-  };
-
-  const updateApplicantStatus = async (id, status) => {
-    try {
-      await recruitmentAPI.updateApplicant(id, { status });
-      toast('Status updated', 'success');
-      viewApplicants(selectedJob, appPage);
-    } catch (err) {
-      toast('Failed to update status', 'error');
-    }
   };
 
   const updateJobStatus = async (id, status) => {
@@ -178,8 +120,8 @@ export default function Recruitment() {
   };
 
   const jobCols = [
-    { 
-      key: 'title', 
+    {
+      key: 'title',
       label: 'Job Title',
       render: (j) => (
         <div style={{ fontWeight: 500, color: 'var(--primary)' }}>
@@ -187,32 +129,32 @@ export default function Recruitment() {
         </div>
       )
     },
-    { 
-      key: 'department', 
+    {
+      key: 'department',
       label: 'Department',
       render: (j) => getDeptName(j.department_id)
     },
-    { 
-      key: 'type', 
+    {
+      key: 'type',
       label: 'Type',
       render: (j) => (
         <Badge variant="neutral">{j.type?.replace('_', ' ') || 'FULL TIME'}</Badge>
       )
     },
-    { 
-      key: 'status', 
+    {
+      key: 'status',
       label: 'Status',
       render: (j) => {
         const variants = { 'OPEN': 'success', 'CLOSED': 'danger', 'PAUSED': 'warning' };
         let normalizedStatus = j.status?.toUpperCase() || 'OPEN';
-        if (j.closing_date && new Date(j.closing_date).getTime() < new Date().setHours(0,0,0,0) && normalizedStatus === 'OPEN') {
+        if (j.closing_date && new Date(j.closing_date).getTime() < new Date().setHours(0, 0, 0, 0) && normalizedStatus === 'OPEN') {
           normalizedStatus = 'CLOSED';
         }
         return <Badge variant={variants[normalizedStatus] || 'neutral'}>{normalizedStatus}</Badge>;
       }
     },
-    { 
-      key: 'closing_date', 
+    {
+      key: 'closing_date',
       label: 'Closing Date',
       render: (j) => j.closing_date ? new Date(j.closing_date).toLocaleDateString() : '—'
     },
@@ -222,7 +164,7 @@ export default function Recruitment() {
       render: (j) => (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {canManage && (
-            <Select 
+            <Select
               value={j.status?.toUpperCase() || 'OPEN'}
               onChange={(e) => updateJobStatus(j.id, e.target.value)}
               style={{ width: 100, padding: '4px 8px', marginBottom: 0, fontSize: '0.75rem' }}
@@ -240,13 +182,16 @@ export default function Recruitment() {
     }
   ];
 
-  const totalPages  = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const appTotalPages = Math.max(1, Math.ceil(appTotal / 20));
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  if (selectedJob) {
+    return <RecruitmentPipeline job={selectedJob} onClose={() => setSelectedJob(null)} />;
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-      <PageHeader 
-        title="Recruitment" 
+      <PageHeader
+        title="Recruitment"
         subtitle="Manage job postings and track applicant pipelines."
         actions={
           canManage ? (
@@ -274,186 +219,109 @@ export default function Recruitment() {
         )}
       </div>
 
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        {/* Fixed: overlay spinner keeps old data visible instead of full table flicker */}
-        <div style={{ position: 'relative' }}>
-          {loading && jobs.length > 0 && (
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-              <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>Loading…</span>
+      {/* Jobs Grid replaces Table */}
+      {loading && jobs.length === 0 ? (
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <Skeleton width="100%" height="300px" />
+        </div>
+      ) : jobs.length === 0 ? (
+        <div style={{ padding: '80px 20px', textAlign: 'center', background: 'var(--white)', borderRadius: 16, border: '1px solid var(--gray-200)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+          <div style={{ width: 72, height: 72, background: 'var(--gray-50)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: 'var(--gray-400)' }}>
+            <Search size={32} />
+          </div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: 20, color: 'var(--gray-800)', fontWeight: 600 }}>No jobs found</h3>
+          <p style={{ margin: 0, color: 'var(--gray-500)', fontSize: 15 }}>{jobSearch ? 'Try adjusting your search terms.' : 'Create a new job posting to get started.'}</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24, position: 'relative' }}>
+          {loading && (
+            <div style={{ position: 'absolute', inset: -10, background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(2px)', zIndex: 10, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ padding: '10px 20px', background: 'var(--white)', borderRadius: 30, boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontSize: 14, fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--primary)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }}></div>
+                Refreshing...
+              </span>
             </div>
           )}
-          <Table 
-            cols={jobCols} 
-            rows={jobs} 
-            loading={loading && jobs.length === 0} 
-            emptyMsg="No active job postings."
-          />
+          {jobs.map(j => {
+            const variants = { 'OPEN': 'success', 'CLOSED': 'danger', 'PAUSED': 'warning' };
+            let normalizedStatus = j.status?.toUpperCase() || 'OPEN';
+            if (j.closing_date && new Date(j.closing_date).getTime() < new Date().setHours(0, 0, 0, 0) && normalizedStatus === 'OPEN') {
+              normalizedStatus = 'CLOSED';
+            }
+            return (
+              <div key={j.id} style={{ background: 'var(--white)', borderRadius: 16, border: '1px solid var(--gray-200)', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)', transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)', display: 'flex', flexDirection: 'column' }} onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)'; e.currentTarget.style.borderColor = 'var(--gray-300)'; }} onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = 'var(--gray-200)'; }}>
+                <div style={{ padding: '24px', borderBottom: '1px solid var(--gray-100)', background: 'linear-gradient(to bottom right, #ffffff, #f8fafc)', position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                    <Badge variant={variants[normalizedStatus] || 'neutral'} style={{ padding: '6px 12px', fontSize: 11 }}>{normalizedStatus}</Badge>
+                    <span style={{ fontSize: 11, color: 'var(--gray-500)', fontWeight: 600, background: 'var(--gray-100)', padding: '4px 10px', borderRadius: 12, letterSpacing: '0.05em' }}>{j.type?.replace('_', ' ') || 'FULL TIME'}</span>
+                  </div>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: 18, fontWeight: 700, color: 'var(--text-dark)', lineHeight: 1.3, letterSpacing: '-0.01em' }}>{j.title}</h3>
+                  <div style={{ fontSize: 13, color: 'var(--gray-600)', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--secondary)' }}></div>
+                    {getDeptName(j.department_id)}
+                  </div>
+                </div>
+
+                <div style={{ padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: 16, background: '#ffffff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--gray-400)', fontWeight: 700, letterSpacing: '0.05em' }}>Closing Date</span>
+                      <span style={{ fontSize: 14, color: 'var(--gray-800)', fontWeight: 600, marginTop: 4 }}>{j.closing_date ? new Date(j.closing_date).toLocaleDateString() : 'Continuous'}</span>
+                    </div>
+                    <Btn variant="primary" onClick={() => viewApplicants(j)} style={{ borderRadius: 8, padding: '8px 16px', fontWeight: 600, boxShadow: '0 4px 10px rgba(30, 23, 96, 0.15)' }}>
+                      <Users size={16} /> Pipeline
+                    </Btn>
+                  </div>
+                </div>
+
+                {canManage && (
+                  <div style={{ padding: '12px 24px', background: 'var(--gray-50)', borderTop: '1px solid var(--gray-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 12, color: 'var(--gray-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Update Status</span>
+                    <Select
+                      value={j.status?.toUpperCase() || 'OPEN'}
+                      onChange={(e) => updateJobStatus(j.id, e.target.value)}
+                      style={{ width: 120, padding: '6px 10px', marginBottom: 0, fontSize: '0.75rem', background: 'white', fontWeight: 600, borderRadius: 6, borderColor: 'var(--gray-300)' }}
+                    >
+                      <option value="OPEN">Open</option>
+                      <option value="PAUSED">Paused</option>
+                      <option value="CLOSED">Closed</option>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
+      )}
 
-        {/* Fixed for 1M+ rows: pagination controls */}
-        {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--gray-200)', fontSize: 13 }}>
-            <span style={{ color: 'var(--gray-500)' }}>
-              Page <strong>{page}</strong> of <strong>{totalPages}</strong>
-              {total > 0 && <> &nbsp;({total} total)</>}
-            </span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <Btn variant="secondary" size="xs" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                <ChevronLeft size={13} /> Prev
-              </Btn>
-              <Btn variant="secondary" size="xs" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
-                Next <ChevronRight size={13} />
-              </Btn>
-            </div>
+      {/* Fixed for 1M+ rows: pagination controls */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--gray-200)', fontSize: 13 }}>
+          <span style={{ color: 'var(--gray-500)' }}>
+            Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+            {total > 0 && <> &nbsp;({total} total)</>}
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn variant="secondary" size="xs" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft size={13} /> Prev
+            </Btn>
+            <Btn variant="secondary" size="xs" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
+              Next <ChevronRight size={13} />
+            </Btn>
           </div>
-        )}
-      </Card>
+        </div>
+      )}
 
-      {/* JOB CREATION MODAL */}
-      <Modal open={jobModalOpen} onClose={() => setJobModalOpen(false)} title="Post New Job">
-        <form onSubmit={handleCreateJob} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Input 
-            label="Job Title" 
-            required 
-            value={jobForm.title}
-            onChange={(e) => setJobForm({...jobForm, title: e.target.value})}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <Select 
-              label="Department" 
-              required
-              value={jobForm.department_id}
-              onChange={(e) => setJobForm({...jobForm, department_id: e.target.value})}
-            >
-              <option value="">Select Department</option>
-              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </Select>
-            <Select 
-              label="Employment Type" 
-              value={jobForm.type}
-              onChange={(e) => setJobForm({...jobForm, type: e.target.value})}
-            >
-              <option value="FULL_TIME">Full Time</option>
-              <option value="PART_TIME">Part Time</option>
-              <option value="CONTRACT">Contract</option>
-              <option value="VISITING">Visiting</option>
-            </Select>
-          </div>
-          <Input 
-            label="Closing Date" 
-            type="date" 
-            required 
-            value={jobForm.closing_date}
-            onChange={(e) => setJobForm({...jobForm, closing_date: e.target.value})}
-          />
-          <Textarea 
-            label="Job Description" 
-            required 
-            rows={4}
-            value={jobForm.description}
-            onChange={(e) => setJobForm({...jobForm, description: e.target.value})}
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
-            <Btn variant="secondary" onClick={() => setJobModalOpen(false)}>Cancel</Btn>
-            <Btn type="submit">Post Job</Btn>
-          </div>
-        </form>
-      </Modal>
-
-      {/* APPLICANTS MODAL — Fixed: paginated per job */}
-      <Modal open={applicantModalOpen} onClose={() => setApplicantModalOpen(false)} title="Manage Applicants" width={700}>
-        {selectedJob && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-dark)' }}>
-                {selectedJob.title} Applicants
-                {appTotal > 0 && <span style={{ fontSize: 13, color: 'var(--gray-500)', fontWeight: 400, marginLeft: 8 }}>({appTotal} total)</span>}
-              </h3>
-              <Btn size="sm" variant="outline" onClick={() => setShowAddApplicant(!showAddApplicant)}>
-                {showAddApplicant ? 'Cancel' : 'Add Applicant'}
-              </Btn>
-            </div>
-            
-            {showAddApplicant && (
-              <Card style={{ marginTop: 16, background: 'var(--gray-50)', padding: 16 }}>
-                <form onSubmit={handleAddApplicant} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <Input label="Name" required value={applicantForm.name} onChange={e => setApplicantForm({...applicantForm, name: e.target.value})} />
-                    <Input label="Email" type="email" required value={applicantForm.email} onChange={e => setApplicantForm({...applicantForm, email: e.target.value})} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <Input label="Phone" value={applicantForm.phone} onChange={e => setApplicantForm({...applicantForm, phone: e.target.value})} />
-                    <Input label="Resume URL" value={applicantForm.resume_url} onChange={e => setApplicantForm({...applicantForm, resume_url: e.target.value})} />
-                  </div>
-                  <Textarea label="Notes" rows={2} value={applicantForm.notes} onChange={e => setApplicantForm({...applicantForm, notes: e.target.value})} />
-                  <Btn type="submit" style={{ alignSelf: 'flex-end' }}>Submit Applicant</Btn>
-                </form>
-              </Card>
-            )}
-
-            <div style={{ marginTop: 24 }}>
-              {loadingApplicants ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {[1, 2].map((i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, border: '1px solid var(--border-color)', borderRadius: 8 }}>
-                      <div>
-                        <Skeleton width="120px" height="16px" style={{ marginBottom: 6 }} />
-                        <Skeleton width="180px" height="12px" />
-                      </div>
-                      <Skeleton width="80px" height="24px" />
-                    </div>
-                  ))}
-                </div>
-              ) : applicants.length === 0 ? (
-                <p style={{ color: 'var(--gray-500)', fontStyle: 'italic' }}>No applicants yet.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {applicants.map(app => (
-                    <div key={app.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, border: '1px solid var(--border-color)', borderRadius: 8 }}>
-                      <div>
-                        <div style={{ fontWeight: 600 }}>{app.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{app.email} {app.phone ? `• ${app.phone}` : ''}</div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <Badge variant={app.status === 'HIRED' ? 'success' : app.status === 'REJECTED' ? 'danger' : 'neutral'}>
-                          {app.status || 'APPLIED'}
-                        </Badge>
-                        <Select 
-                          value={app.status || 'APPLIED'}
-                          onChange={(e) => updateApplicantStatus(app.id, e.target.value)}
-                          style={{ width: 120, padding: '4px 8px', marginBottom: 0 }}
-                        >
-                          <option value="APPLIED">Applied</option>
-                          <option value="SCREENING">Screening</option>
-                          <option value="INTERVIEW">Interview</option>
-                          <option value="OFFERED">Offered</option>
-                          <option value="HIRED">Hired</option>
-                          <option value="REJECTED">Rejected</option>
-                        </Select>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Fixed for 1M+ rows: applicant pagination */}
-              {appTotalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
-                  <Btn variant="secondary" size="xs" disabled={appPage <= 1} onClick={() => viewApplicants(selectedJob, appPage - 1)}>
-                    <ChevronLeft size={13} /> Prev
-                  </Btn>
-                  <span style={{ fontSize: 13, color: 'var(--gray-500)', display: 'flex', alignItems: 'center' }}>
-                    {appPage} / {appTotalPages}
-                  </span>
-                  <Btn variant="secondary" size="xs" disabled={appPage >= appTotalPages} onClick={() => viewApplicants(selectedJob, appPage + 1)}>
-                    Next <ChevronRight size={13} />
-                  </Btn>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
+      {/* JOB CREATION WIZARD */}
+      <JobPostingWizard
+        open={jobModalOpen}
+        onClose={() => setJobModalOpen(false)}
+        onSuccess={() => {
+          setJobModalOpen(false);
+          setPage(1);
+          loadJobs();
+        }}
+      />
 
     </div>
   );

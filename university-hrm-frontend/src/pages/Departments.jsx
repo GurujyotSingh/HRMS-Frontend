@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { deptAPI } from '../services/api';
 import { PageHeader, Card, Btn, Modal, Input, Skeleton, toast, Badge } from '../components/ui';
+import AsyncEmployeeSelect from '../components/ui/AsyncEmployeeSelect';
 import { Plus, Edit2, Trash2, Building2, Mail } from 'lucide-react';
 
 export default function Departments() {
@@ -9,7 +10,7 @@ export default function Departments() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', code: '', director_id: '' });
+  const [form, setForm] = useState({ name: '', code: '' });
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const load = async () => {
@@ -28,13 +29,13 @@ export default function Departments() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '', code: '', director_id: '' });
+    setForm({ name: '', code: '' });
     setShowModal(true);
   };
 
   const openEdit = (dept) => {
     setEditing(dept);
-    setForm({ name: dept.name, code: dept.code || '', director_id: dept.director_id || '' });
+    setForm({ name: dept.name, code: dept.code || '' });
     setShowModal(true);
   };
 
@@ -42,9 +43,7 @@ export default function Departments() {
     e.preventDefault();
     setSaving(true);
     try {
-      // Remove empty director_id to allow backend to handle it as null if needed
       const payload = { ...form };
-      if (!payload.director_id) delete payload.director_id;
 
       if (editing) {
         await deptAPI.update(editing.id, payload);
@@ -213,7 +212,36 @@ export default function Departments() {
         <form onSubmit={handleSave}>
           <Input label="Department Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Computer Science" required id="dept-name" />
           <Input label="Department Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="e.g. CS" required id="dept-code" />
-          <Input label="Director ID (Optional)" value={form.director_id} onChange={(e) => setForm({ ...form, director_id: e.target.value })} placeholder="UUID of the director" id="dept-director" />
+          
+          <div style={{ marginBottom: 16 }}>
+            {editing && editing.director_name && (
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-dark)' }}>Assigned Director</label>
+                <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, color: '#64748b', fontSize: 14 }}>
+                  <strong>{editing.director_name}</strong>
+                  {editing.director_status === 'ACTIVE' ? (
+                    <Badge variant="success" style={{ marginLeft: 8, fontSize: 10 }}>Active</Badge>
+                  ) : (
+                    <Badge variant="secondary" style={{ marginLeft: 8, fontSize: 10 }}>{editing.director_status || 'Inactive'}</Badge>
+                  )}
+                  <div style={{ fontSize: 12, marginTop: 6, color: 'var(--text-light)' }}>
+                    * Directors are managed automatically via the Employee Directory.
+                  </div>
+                </div>
+              </div>
+            )}
+            {editing && !editing.director_name && (
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-dark)' }}>Assigned Director</label>
+                <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 14 }}>
+                  No Director Assigned
+                  <div style={{ fontSize: 12, marginTop: 6, color: '#b91c1c' }}>
+                    * To assign a director, promote an employee from the Employee Directory.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
             <Btn variant="secondary" type="button" onClick={() => setShowModal(false)}>Cancel</Btn>

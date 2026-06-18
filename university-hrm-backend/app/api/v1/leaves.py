@@ -11,12 +11,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
 from app.db.models.leave_request import LeaveRequest
 from app.db.models.user import User
 from app.db.models.role import RoleEnum
+from groq import AsyncGroq
+from app.core.config import settings
+from app.services.email_service import send_leave_status_email
 
 router = APIRouter(prefix="/leaves", tags=["Leaves"])
 
@@ -37,9 +41,36 @@ class LeaveProcess(BaseModel):
     remarks: Optional[str] = None
 
 
+class AIChatRequest(BaseModel):
+    prompt: str
+
+
+class AIChatResponse(BaseModel):
+    response: str
+
+
+class DeptBrief(BaseModel):
+    name: str
+    model_config = {"from_attributes": True}
+
+class EmpBrief(BaseModel):
+    department: Optional[DeptBrief] = None
+    model_config = {"from_attributes": True}
+
+class UserBrief(BaseModel):
+    id: str
+    first_name: str
+    last_name: str
+    email: str
+    phone: Optional[str] = None
+    role: Optional[str] = None
+    employment: Optional[EmpBrief] = None
+    model_config = {"from_attributes": True}
+
 class LeaveOut(BaseModel):
     id: str
     employee_id: str
+    employee: Optional[UserBrief] = None
     leave_type: Optional[str] = None
     from_date: datetime
     to_date: datetime
@@ -241,6 +272,25 @@ async def hr_process_leave(
         leave.remarks = body.remarks
     await db.commit()
     await db.refresh(leave)
+
+    # Fetch employee to send email
+    emp_result = await db.execute(select(User).where(User.id == leave.employee_id))
+    employee = emp_result.scalar_one_or_none()
+    if employee:
+        emp_name = f"{employee.first_name} {employee.last_name}".strip()
+        asyncio.create_task(
+            send_leave_status_email(
+                personal_email=employee.personal_email,
+                work_email=employee.work_email,
+                employee_name=emp_name,
+                status=leave.status,
+                leave_type=leave.leave_type or 'casual',
+                from_date=leave.from_date.strftime("%d %b %Y"),
+                to_date=leave.to_date.strftime("%d %b %Y"),
+                remarks=leave.remarks or ''
+            )
+        )
+
     return leave
 
 
@@ -260,3 +310,29 @@ async def hr_update_leave(
     await db.commit()
     await db.refresh(leave)
     return leave
+
+
+@router.post("/ai-generate", response_model=AIChatResponse)
+async def generate_leave_ai(
+    data: AIChatRequest,
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN, RoleEnum.DEPARTMENT_HEAD)),
+):
+    """Generate HR leave analysis directly using Groq (bypasses tool agents)."""
+    api_key = settings.GROQ_API_KEY
+    if not api_key:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured.")
+    client = AsyncGroq(api_key=api_key)
+    
+    try:
+        completion = await client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": "You are a helpful and extremely concise HR assistant."},
+                {"role": "user", "content": data.prompt}
+            ],
+            temperature=0.3,
+            max_tokens=256
+        )
+        return AIChatResponse(response=completion.choices[0].message.content.strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

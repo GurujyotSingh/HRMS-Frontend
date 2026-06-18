@@ -44,6 +44,7 @@ class OnboardingTask(Base):
     onboarding_record_id: Mapped[str] = mapped_column(String, ForeignKey("onboarding_employees.id"), nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_to: Mapped[str] = mapped_column(String, default="EMPLOYEE", nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -198,6 +198,7 @@ export const leavesAPI = {
   review: (id, data) => unwrap(api.post(`/leaves/hr/${id}/process`, data)),
   approve: (id) => leavesAPI.hodApprove(id),
   reject: (id) => leavesAPI.hodReject(id),
+  aiGenerate: (data) => unwrap(api.post('/leaves/ai-generate', data)),
 };
 
 export const leaveBalanceAPI = {
@@ -268,6 +269,7 @@ export const onboardAPI = {
   create: (data) => unwrap(api.post(`/onboarding/hr/employee/${data.employee_id}`, data)),
   addTask: (empId, data) => unwrap(api.post(`/onboarding/hr/employee/${empId}/tasks`, data)),
   updateTask: (taskId, data) => unwrap(api.post(`/onboarding/my/tasks/${taskId}/complete`)),
+  hrCompleteTask: (taskId) => unwrap(api.post(`/onboarding/hr/tasks/${taskId}/complete`)),
   deleteTask: (taskId) => api.delete(`/onboarding/tasks/${taskId}`), // Not used in UI but kept for completeness
 
   // Offboarding
@@ -299,6 +301,7 @@ export const recruitmentAPI = {
   addApplicant: (jobId, data) =>
     unwrap(api.post(`/recruitment/jobs/${jobId}/applicants`, data)),
   updateApplicant: (id, data) => unwrap(api.patch(`/recruitment/applicants/${id}`, data)),
+  generateAiDescription: (data) => unwrap(api.post('/recruitment/jobs/generate-ai', data)),
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -441,9 +444,7 @@ export const perfAPI = {
 export const publicCareersAPI = {
   getJobs: async () => (await unwrap(axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/public/careers/jobs`, { params: { _t: Date.now() } }))).data,
   getJob: async (id) => (await unwrap(axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/public/careers/jobs/${id}`, { params: { _t: Date.now() } }))).data,
-  apply: async (id, formData) => (await unwrap(axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/public/careers/jobs/${id}/apply`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }))).data
+  apply: async (id, formData) => (await unwrap(axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/public/careers/jobs/${id}/apply`, formData))).data
 };
 
 export default api;

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.db.models.recruitment import RecruitmentJob, RecruitmentApplicant
+from app.services.email_service import send_job_application_received_email
 
 router = APIRouter(prefix="/public/careers", tags=["Public Careers"])
 
@@ -136,6 +137,14 @@ async def apply_for_job(
     db.add(new_applicant)
     await db.commit()
     await db.refresh(new_applicant)
+    
+    # Send confirmation email asynchronously
+    import asyncio
+    asyncio.create_task(send_job_application_received_email(
+        candidate_email=new_applicant.email,
+        candidate_name=new_applicant.name,
+        job_title=job.title
+    ))
     
     return PublicApplicantOut(
         id=new_applicant.id,

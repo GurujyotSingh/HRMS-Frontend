@@ -50,7 +50,17 @@ async def create_onboarding_for_employee(
     db: AsyncSession,
     employee_id: str,
     task_titles: Optional[list] = None,
+    commit: bool = True
 ) -> OnboardingEmployee:
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Check for existing record to prevent duplicates
+    existing = await get_onboarding_by_employee(db, employee_id)
+    if existing:
+        logger.warning(f"Onboarding record already exists for employee_id: {employee_id}")
+        raise ValueError("Onboarding already exists for this employee")
+
     now = _utcnow()
     record = OnboardingEmployee(
         id=str(uuid.uuid4()),
@@ -64,25 +74,62 @@ async def create_onboarding_for_employee(
     db.add(record)
     await db.flush()
 
-    # Add default tasks
-    default_tasks = task_titles or [
-        "Submit joining documents",
-        "Set up workstation",
-        "Complete IT system access setup",
-        "Meet with HR for orientation",
-        "Review HR policies and handbook",
-        "Complete mandatory training modules",
+    # Distribute tasks between Employee and HR
+    employee_tasks = [
+        "Submit Personal Documents",
+        "Complete Tax Forms",
+        "Read Employee Handbook",
+        "Complete Cybersecurity Training"
     ]
-    for title in default_tasks:
-        task = OnboardingTask(
+    hr_tasks = [
+        "Verify Documents",
+        "Department Orientation",
+        "Meet Reporting Manager",
+        "IT Account Verification"
+    ]
+
+    for title in employee_tasks:
+        db.add(OnboardingTask(
             id=str(uuid.uuid4()),
             onboarding_record_id=record.id,
             title=title,
-        )
-        db.add(task)
+            assigned_to="EMPLOYEE"
+        ))
 
-    await db.commit()
+    for title in hr_tasks:
+        db.add(OnboardingTask(
+            id=str(uuid.uuid4()),
+            onboarding_record_id=record.id,
+            title=title,
+            assigned_to="HR"
+        ))
+
+    if commit:
+        await db.commit()
+    logger.info(f"Created onboarding record for employee_id: {employee_id} with 8 tasks.")
+    
+    if not commit:
+        await db.flush()
+        return record
+
     return await get_onboarding_by_employee(db, employee_id)
+
+
+async def check_and_complete_onboarding(db: AsyncSession, record_id: str):
+    """Check if all tasks are complete, and if so, complete the onboarding."""
+    result = await db.execute(
+        select(OnboardingEmployee)
+        .options(selectinload(OnboardingEmployee.tasks))
+        .where(OnboardingEmployee.id == record_id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        return
+
+    if all(task.is_completed for task in record.tasks):
+        record.status = "COMPLETED"
+        record.completed_at = _utcnow()
+        await db.commit()
 
 
 async def add_onboarding_task(
