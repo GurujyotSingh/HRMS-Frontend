@@ -163,9 +163,8 @@ async def get_audit_analytics(db: AsyncSession) -> dict:
     severity_dist = {"INFO": 0, "WARNING": 0, "CRITICAL": 0}
     recent_criticals = []
     
-    # Activity Trend (last 7 days)
-    today = datetime.utcnow().date()
-    activity_trend = {(today - timedelta(days=i)).isoformat(): 0 for i in range(6, -1, -1)}
+    # Activity Trend (Dynamic: Last 7 active days from the logs)
+    activity_trend_map = {}
     
     for log in logs:
         sev = get_severity(log.action)
@@ -180,9 +179,20 @@ async def get_audit_analytics(db: AsyncSession) -> dict:
                 
         action_dist[log.action] = action_dist.get(log.action, 0) + 1
         
+        
         log_date = log.created_at.date().isoformat()
-        if log_date in activity_trend:
-            activity_trend[log_date] += 1
+        activity_trend_map[log_date] = activity_trend_map.get(log_date, 0) + 1
+
+    # Get the 7 most recent dates with data, then sort them chronologically
+    sorted_dates = sorted(activity_trend_map.keys(), reverse=True)[:7]
+    sorted_dates.sort() # sort chronologically for the chart
+    
+    activity_trend = {d: activity_trend_map[d] for d in sorted_dates}
+    
+    # Fallback to last 7 days if completely empty
+    if not activity_trend:
+        today = datetime.utcnow().date()
+        activity_trend = {(today - timedelta(days=i)).isoformat(): 0 for i in range(6, -1, -1)}
 
     return {
         "kpi": {

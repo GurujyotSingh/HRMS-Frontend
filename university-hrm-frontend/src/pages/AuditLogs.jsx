@@ -201,21 +201,34 @@ export default function AuditLogs() {
           <Card>
             <h3 style={{ margin: '0 0 16px 0', fontSize: 15, color: 'var(--gray-700)' }}>Action Distribution</h3>
             <div style={{ height: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 8 }}>
-              {Object.entries(action_distribution).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([action, count]) => {
-                const total = kpi.total_events || 1;
-                const pct = (count / total) * 100;
-                return (
-                  <div key={action}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600, color: 'var(--gray-700)' }}>{action}</span>
-                      <span style={{ color: 'var(--gray-500)' }}>{count} ({pct.toFixed(1)}%)</span>
+              {(() => {
+                const maxCount = Math.max(...Object.values(action_distribution), 1);
+                return Object.entries(action_distribution).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([action, count], index) => {
+                  const pct = (count / maxCount) * 100;
+                  const totalPct = (count / (kpi.total_events || 1)) * 100; // actual percentage of total for text
+                  
+                  // Generate an interesting color scheme for the top actions
+                  const colors = [
+                    'var(--primary-500)', 'var(--indigo-500)', 'var(--success-500)', 
+                    'var(--warning-500)', 'var(--danger-500)', 'var(--cyan-500)',
+                    'var(--fuchsia-500)', 'var(--orange-500)', 'var(--teal-500)', 'var(--rose-500)'
+                  ];
+                  const color = colors[index % colors.length];
+
+                  return (
+                    <div key={action}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--gray-700)' }}>{action.replace(/_/g, ' ')}</span>
+                        <span style={{ color: 'var(--gray-500)' }}>{count} ({totalPct.toFixed(1)}%)</span>
+                      </div>
+                      <div style={{ height: 8, background: 'var(--gray-100)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--gray-200)' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4, transition: 'width 0.5s ease-out' }} />
+                      </div>
                     </div>
-                    <div style={{ height: 6, background: 'var(--gray-100)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--primary-500)' }} />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
+
             </div>
           </Card>
         </div>
