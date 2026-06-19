@@ -130,6 +130,17 @@ export default function AuditLogs() {
         </Badge>
       );
     }},
+    { key: 'details', label: 'Details', render: (r) => {
+      const d = r.details || r.detail;
+      if (!d) return '—';
+      try {
+        const parsed = JSON.parse(d);
+        return parsed.description || 'View details';
+      } catch {
+        return d.length > 40 ? d.substring(0, 40) + '...' : d;
+      }
+    }},
+    { key: 'ipAddress', label: 'IP Address', render: (r) => r.ipAddress || r.ip_address || '—' },
     { key: 'status', label: 'Status', render: (r) => <Badge variant={r.status === 'success' ? 'success' : 'danger'}>{r.status}</Badge> },
   ];
 
