@@ -253,7 +253,7 @@ export default function Onboarding() {
           {isPrivileged && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-                <StatCard title="Total Employees" value={stats.total} icon={<Users size={24} color="var(--primary)" />} />Total EMpoyees
+                <StatCard title="Total Employees" value={stats.total} icon={<Users size={24} color="var(--primary)" />} />
                 <StatCard title="Not Started" value={stats.notStarted} icon={<UserMinus size={24} color="var(--gray-500)" />} />
                 <StatCard title="In Progress" value={stats.inProgress} icon={<TrendingUp size={24} color="#3b82f6" />} />
                 <StatCard title="Completed" value={stats.completed} icon={<UserCheck size={24} color="var(--success)" />} />
