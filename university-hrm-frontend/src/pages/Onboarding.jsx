@@ -253,10 +253,10 @@ export default function Onboarding() {
           {isPrivileged && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-                <StatCard title="Total Employees" value={stats.total} icon={<Users size={24} color="var(--primary)" />} />
-                <StatCard title="Not Started" value={stats.notStarted} icon={<UserMinus size={24} color="var(--gray-500)" />} />
-                <StatCard title="In Progress" value={stats.inProgress} icon={<TrendingUp size={24} color="#3b82f6" />} />
-                <StatCard title="Completed" value={stats.completed} icon={<UserCheck size={24} color="var(--success)" />} />
+                <StatCard label="Total Employees" value={stats.total} icon={<Users size={24} color="var(--primary)" />} />
+                <StatCard label="Not Started" value={stats.notStarted} icon={<UserMinus size={24} color="var(--gray-500)" />} />
+                <StatCard label="In Progress" value={stats.inProgress} icon={<TrendingUp size={24} color="#3b82f6" />} />
+                <StatCard label="Completed" value={stats.completed} icon={<UserCheck size={24} color="var(--success)" />} />
               </div>
 
               <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -303,7 +303,7 @@ export default function Onboarding() {
                       key: 'tasks', label: 'Progress', render: (r) => {
                         const rec = allRecords.find(or => or.employee_id === r.id);
                         if (!rec) return '—';
-                        const done = rec.tasks?.filter((t) => t.isCompleted)?.length || 0;
+                        const done = rec.tasks?.filter((t) => t.is_completed)?.length || 0;
                         const total = rec.tasks?.length || 0;
                         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                         return (
@@ -433,12 +433,12 @@ export default function Onboarding() {
                   key={task.id}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
-                    background: task.isCompleted ? 'rgba(16, 185, 129, 0.05)' : 'var(--bg)',
+                    background: task.is_completed ? 'rgba(16, 185, 129, 0.05)' : 'var(--bg)',
                     borderRadius: '6px',
-                    border: `1px solid ${task.isCompleted ? 'var(--success)' : 'var(--border-color)'}`,
+                    border: `1px solid ${task.is_completed ? 'var(--success)' : 'var(--border-color)'}`,
                   }}
                 >
-                  {task.isCompleted ? (
+                  {task.is_completed ? (
                     <CheckCircle2 size={18} color="var(--success)" />
                   ) : (
                     <button
