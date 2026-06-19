@@ -6,7 +6,7 @@ import {
 } from '../components/ui';
 import AsyncEmployeeSelect from '../components/ui/AsyncEmployeeSelect';
 import { OnboardingWizard } from '../components/OnboardingWizard';
-import { CheckCircle2, Circle, UserMinus, Eye, Search, FilterX, Users, UserCheck, TrendingUp, Calendar } from 'lucide-react';
+import { CheckCircle2, Circle, UserMinus, Eye, Search, FilterX, Users, UserCheck, TrendingUp, Calendar, AlertTriangle } from 'lucide-react';
 
 // Fixed: Added ONBOARDING_REQUIRED_ROLES for correct metric calculations and visibility filtering
 const ONBOARDING_REQUIRED_ROLES = ['DIRECTOR', 'FACULTY', 'STAFF', 'ACCOUNTANT'];
@@ -30,6 +30,10 @@ export default function Onboarding() {
   const [deptFilter, setDeptFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [viewOnboarding, setViewOnboarding] = useState(null);
+
+  // Offboarding Filters
+  const [offSearchQuery, setOffSearchQuery] = useState('');
+  const [offClearanceFilter, setOffClearanceFilter] = useState('');
 
   const isPrivileged = hasRole('admin', 'hr', 'hr_manager', 'hr_staff');
 
@@ -223,6 +227,24 @@ export default function Onboarding() {
     return true;
   });
 
+  // Offboarding HR Calculations
+  const offStats = { total: offRecords.length, pending: 0, cleared: 0, hold: 0 };
+  offRecords.forEach(r => {
+    if (r.clearanceStatus === 'CLEARED') offStats.cleared++;
+    else if (r.clearanceStatus === 'HOLD') offStats.hold++;
+    else offStats.pending++;
+  });
+
+  const filteredOffRecords = offRecords.filter(r => {
+    const name = `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}`.toLowerCase();
+    if (offSearchQuery && !name.includes(offSearchQuery.toLowerCase())) return false;
+    
+    const status = r.clearanceStatus || 'PENDING';
+    if (offClearanceFilter && status !== offClearanceFilter) return false;
+    
+    return true;
+  });
+
   return (
     <>
       <PageHeader
@@ -352,11 +374,42 @@ export default function Onboarding() {
 
       {/* Offboarding Tab */}
       {tab === 'offboarding' && isPrivileged && (
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: 16 }}>Offboarding Pipeline</h3>
-            <Btn size="sm" onClick={() => setShowInitOff(true)}>Initiate Offboarding</Btn>
+        <>
+          {/* KPI StatCards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <StatCard label="Total Offboarding" value={offStats.total} icon={<Users size={24} color="var(--primary)" />} />
+            <StatCard label="Pending Clearance" value={offStats.pending} icon={<UserMinus size={24} color="var(--gray-500)" />} />
+            <StatCard label="On Hold" value={offStats.hold} icon={<AlertTriangle size={24} color="var(--danger)" />} />
+            <StatCard label="Cleared" value={offStats.cleared} icon={<UserCheck size={24} color="var(--success)" />} />
           </div>
+
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {/* Filter Bar */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <h3 style={{ fontSize: 16, margin: 0, marginRight: 'auto' }}>Offboarding Pipeline</h3>
+              <Input
+                prefix={<Search size={16} />}
+                placeholder="Search employees..."
+                value={offSearchQuery}
+                onChange={e => setOffSearchQuery(e.target.value)}
+                style={{ width: 220, marginBottom: 0 }}
+              />
+              <Select value={offClearanceFilter} onChange={e => setOffClearanceFilter(e.target.value)} style={{ width: 180, marginBottom: 0 }}>
+                <option value="">All Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="HOLD">On Hold</option>
+                <option value="CLEARED">Cleared</option>
+              </Select>
+              {(offSearchQuery || offClearanceFilter) && (
+                <Btn variant="secondary" onClick={() => { setOffSearchQuery(''); setOffClearanceFilter(''); }}>
+                  <FilterX size={16} /> Clear
+                </Btn>
+              )}
+              <div style={{ width: 1, height: 24, background: 'var(--border-color)', margin: '0 8px' }} />
+              <Btn size="sm" onClick={() => setShowInitOff(true)}>
+                <UserMinus size={16} /> Initiate Offboarding
+              </Btn>
+            </div>
           <Table
             cols={[
               { key: 'emp', label: 'Employee', render: (r) => `${r.employee?.first_name || ''} ${r.employee?.last_name || ''}` },
@@ -370,10 +423,18 @@ export default function Onboarding() {
                 )
               },
               {
-                key: 'tasks', label: 'Tasks', render: (r) => {
-                  const done = r.tasks?.filter((t) => t.isCompleted)?.length || 0;
+                key: 'tasks', label: 'Clearance Progress', render: (r) => {
+                  const done = r.tasks?.filter((t) => t.is_completed)?.length || 0;
                   const total = r.tasks?.length || 0;
-                  return `${done}/${total}`;
+                  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ flex: 1, height: 6, background: 'var(--gray-200)', borderRadius: 3, width: 60, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? 'var(--success)' : '#3b82f6', transition: 'width 0.3s' }} />
+                      </div>
+                      <span style={{ fontSize: 12, color: 'var(--gray-600)', minWidth: 28 }}>{pct}%</span>
+                    </div>
+                  );
                 }
               },
               {
@@ -384,82 +445,143 @@ export default function Onboarding() {
                 )
               },
             ]}
-            rows={offRecords}
+            rows={filteredOffRecords}
             loading={false}
-            emptyMsg="No offboarding records"
+            emptyMsg="No offboarding records match the filters."
           />
         </Card>
+        </>
       )}
 
       {/* Initiate Offboarding Modal */}
-      <Modal open={showInitOff} onClose={() => setShowInitOff(false)} title="Initiate Offboarding" width={480}>
-        <form onSubmit={handleInitiateOff}>
-          <AsyncEmployeeSelect
-            label="Employee"
-            value={offForm.employee_id}
-            onChange={(val) => setOffForm({ ...offForm, employee_id: val })}
-            required
+      <Modal open={showInitOff} onClose={() => setShowInitOff(false)} title="Initiate Offboarding" width={500}>
+        <form onSubmit={handleInitiateOff} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ padding: '16px', background: 'var(--gray-50)', borderRadius: '8px', border: '1px solid var(--gray-200)' }}>
+            <AsyncEmployeeSelect
+              label="Select Employee"
+              value={offForm.employee_id}
+              onChange={(val) => setOffForm({ ...offForm, employee_id: val })}
+              required
+            />
+          </div>
+          
+          <Input 
+            label="Last Working Date" 
+            type="date" 
+            value={offForm.last_working_date} 
+            onChange={(e) => setOffForm({ ...offForm, last_working_date: e.target.value })} 
+            required 
+            id="off-last" 
           />
-          <Textarea label="Reason" value={offForm.reason} onChange={(e) => setOffForm({ ...offForm, reason: e.target.value })} placeholder="Reason for offboarding" required id="off-reason" />
-          <Input label="Last Working Date" type="date" value={offForm.last_working_date} onChange={(e) => setOffForm({ ...offForm, last_working_date: e.target.value })} required id="off-last" />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+          
+          <Textarea 
+            label="Reason for Offboarding" 
+            value={offForm.reason} 
+            onChange={(e) => setOffForm({ ...offForm, reason: e.target.value })} 
+            placeholder="Please provide details regarding the offboarding (e.g. Resignation, End of Contract)..." 
+            required 
+            id="off-reason" 
+            rows={4}
+          />
+          
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 12, paddingTop: 16, borderTop: '1px solid var(--gray-200)' }}>
             <Btn variant="secondary" type="button" onClick={() => setShowInitOff(false)}>Cancel</Btn>
-            <Btn type="submit" loading={submitting}>Initiate</Btn>
+            <Btn variant="danger" type="submit" loading={submitting}>
+              <UserMinus size={16} /> Initiate Offboarding
+            </Btn>
           </div>
         </form>
       </Modal>
 
       {/* View Offboarding Details Modal */}
       {viewOff && (
-        <Modal open={!!viewOff} onClose={() => setViewOff(null)} title="Offboarding Details" width={560}>
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div><strong>Employee:</strong> {viewOff.employee?.first_name} {viewOff.employee?.last_name}</div>
-              <div><strong>Last Working Date:</strong> {new Date(viewOff.last_working_date).toLocaleDateString()}</div>
-              <div><strong>Status:</strong> <Badge variant="info">{viewOff.status}</Badge></div>
-              <div><strong>Clearance:</strong> <Badge variant="warning">{viewOff.clearanceStatus}</Badge></div>
-              <div style={{ gridColumn: '1 / -1' }}><strong>Notes:</strong> {viewOff.notes || '—'}</div>
-              <div style={{ gridColumn: '1 / -1' }}><strong>Reason:</strong> {viewOff.reason || '—'}</div>
+        <Modal open={!!viewOff} onClose={() => setViewOff(null)} title="Offboarding Details" width={600}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Employee Summary Card */}
+            <div style={{ padding: 16, background: 'var(--gray-50)', borderRadius: 8, border: '1px solid var(--gray-200)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div>
+                  <h4 style={{ margin: '0 0 4px 0', fontSize: 16, color: 'var(--gray-800)' }}>
+                    {viewOff.employee?.first_name} {viewOff.employee?.last_name}
+                  </h4>
+                  <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>{viewOff.employee?.email}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Badge variant="info">{viewOff.status}</Badge>
+                  <Badge variant={viewOff.clearanceStatus === 'CLEARED' ? 'success' : viewOff.clearanceStatus === 'HOLD' ? 'danger' : 'warning'}>
+                    {viewOff.clearanceStatus || 'PENDING'} Clearance
+                  </Badge>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
+                <div>
+                  <span style={{ color: 'var(--gray-500)', display: 'block', marginBottom: 2 }}>Last Working Date</span>
+                  <span style={{ fontWeight: 600, color: 'var(--gray-800)' }}>{new Date(viewOff.last_working_date).toLocaleDateString()}</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--gray-500)', display: 'block', marginBottom: 2 }}>Reason</span>
+                  <span style={{ fontWeight: 500, color: 'var(--gray-800)' }}>{viewOff.reason || '—'}</span>
+                </div>
+              </div>
+              
+              {viewOff.notes && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--gray-200)', fontSize: 13 }}>
+                  <span style={{ color: 'var(--gray-500)', display: 'block', marginBottom: 2 }}>HR Notes</span>
+                  <span style={{ color: 'var(--gray-700)' }}>{viewOff.notes}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Clearance Checklist */}
+            <div>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: 15, color: 'var(--gray-700)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckCircle2 size={18} color="var(--primary)" /> Clearance Checklist
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {viewOff.tasks?.length === 0 ? (
+                  <div style={{ padding: 20, textAlign: 'center', background: 'var(--gray-50)', borderRadius: 8, color: 'var(--gray-500)', fontSize: 13 }}>
+                    No clearance tasks generated for this employee.
+                  </div>
+                ) : (
+                  viewOff.tasks?.map((task) => (
+                    <div
+                      key={task.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                        background: task.is_completed ? 'rgba(16, 185, 129, 0.05)' : 'white',
+                        borderRadius: '8px',
+                        border: `1px solid ${task.is_completed ? 'var(--success)' : 'var(--gray-200)'}`,
+                        boxShadow: task.is_completed ? 'none' : '0 1px 2px rgba(0,0,0,0.02)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {task.is_completed ? (
+                        <CheckCircle2 size={20} color="var(--success)" />
+                      ) : (
+                        <button
+                          onClick={() => handleOffCompleteTask(viewOff.id, task.id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
+                          title="Mark as completed"
+                        >
+                          <Circle size={20} color="var(--gray-400)" />
+                        </button>
+                      )}
+                      <div style={{ flex: 1, fontSize: 14 }}>
+                        <div style={{ fontWeight: 600, color: task.is_completed ? 'var(--gray-500)' : 'var(--gray-800)', textDecoration: task.is_completed ? 'line-through' : 'none' }}>
+                          {task.title}
+                        </div>
+                        {task.description && <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2 }}>{task.description}</div>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-
-          <h4 style={{ marginBottom: 12, borderBottom: '1px solid var(--border-color)', paddingBottom: 6 }}>Clearance Tasks</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {viewOff.tasks?.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>No tasks generated.</div>
-            ) : (
-              viewOff.tasks?.map((task) => (
-                <div
-                  key={task.id}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
-                    background: task.is_completed ? 'rgba(16, 185, 129, 0.05)' : 'var(--bg)',
-                    borderRadius: '6px',
-                    border: `1px solid ${task.is_completed ? 'var(--success)' : 'var(--border-color)'}`,
-                  }}
-                >
-                  {task.is_completed ? (
-                    <CheckCircle2 size={18} color="var(--success)" />
-                  ) : (
-                    <button
-                      onClick={() => handleOffCompleteTask(viewOff.id, task.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                    >
-                      <Circle size={18} color="var(--gray-500)" />
-                    </button>
-                  )}
-                  <div style={{ flex: 1, fontSize: 13 }}>
-                    <div style={{ fontWeight: 500, color: task.isCompleted ? 'var(--gray-500)' : 'var(--text-dark)', textDecoration: task.isCompleted ? 'line-through' : 'none' }}>
-                      {task.title}
-                    </div>
-                    {task.description && <div style={{ fontSize: 11, color: 'var(--gray-500)' }}>{task.description}</div>}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          <div style={{ marginTop: 24, textAlign: 'right' }}>
-            <Btn onClick={() => setViewOff(null)}>Close</Btn>
+          
+          <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--gray-200)', textAlign: 'right' }}>
+            <Btn variant="secondary" onClick={() => setViewOff(null)}>Close</Btn>
           </div>
         </Modal>
       )}
