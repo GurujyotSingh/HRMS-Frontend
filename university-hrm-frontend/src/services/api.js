@@ -372,6 +372,7 @@ export const reportsAPI = {
 export const auditAPI = {
   list: (params) => unwrap(api.get('/audit', { params })),
   logs: (params) => unwrap(api.get('/audit/logs', { params })),
+  analytics: () => unwrap(api.get('/audit/analytics')),
 };
 
 
