@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   { path: '/leaves', label: 'Leaves', icon: CalendarDays, roles: ALL_STAFF_ROLES },
   { path: '/attendance', label: 'Attendance', icon: Clock, roles: ALL_STAFF_ROLES },
   { path: '/payroll', label: 'Payroll', icon: Wallet, roles: ALL_STAFF_ROLES },
-  { path: '/onboarding', label: 'Onboarding', icon: ClipboardList, roles: ALL_STAFF_ROLES },
+  { path: '/onboarding', label: 'Onboarding and Offboarding', icon: ClipboardList, roles: ALL_STAFF_ROLES },
   { path: '/performance', label: 'Academic Evaluations', icon: Target, roles: ALL_STAFF_ROLES },
 
   { section: 'Communication' },

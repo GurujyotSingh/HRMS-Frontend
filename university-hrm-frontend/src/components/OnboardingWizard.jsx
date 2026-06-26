@@ -36,14 +36,16 @@ export const OnboardingWizard = ({ record, isHR, onCompleteTask }) => {
     if (!record) return;
     if (progress === 100) {
       setCurrentStep(6);
-    } else if (isCompleted("Submit Personal Documents") && isCompleted("Complete Tax Forms") && !isCompleted("Read Employee Handbook")) {
+    } else if (!isCompleted("Submit Personal Documents") || !isCompleted("Complete Tax Forms") || !isCompleted("Verify Documents")) {
+      setCurrentStep(2);
+    } else if (!isCompleted("Read Employee Handbook")) {
       setCurrentStep(3);
-    } else if (isCompleted("Read Employee Handbook") && !isCompleted("Complete Cybersecurity Training")) {
+    } else if (!isCompleted("Complete Cybersecurity Training") || !isCompleted("Department Orientation")) {
       setCurrentStep(4);
-    } else if (isCompleted("Complete Cybersecurity Training") && !isCompleted("Meet Reporting Manager")) {
+    } else if (!isCompleted("Meet Reporting Manager") || !isCompleted("IT Account Verification")) {
       setCurrentStep(5);
     } else {
-      setCurrentStep(progress === 100 ? 6 : 2); // Default to documents if not done
+      setCurrentStep(progress === 100 ? 6 : 5);
     }
   }, [record]);
 

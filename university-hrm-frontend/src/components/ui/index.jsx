@@ -303,8 +303,9 @@ export function Input({ label, error, style, ...props }) {
           fontFamily: 'var(--font-body)',
           fontSize: 13,
           outline: 'none',
-          background: 'var(--white)',
-          color: 'var(--text-dark)',
+          background: props.disabled ? 'var(--gray-100)' : 'var(--white)',
+          color: props.disabled ? 'var(--gray-500)' : 'var(--text-dark)',
+          cursor: props.disabled ? 'not-allowed' : 'text',
           transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
           letterSpacing: '-0.01em',
         }}

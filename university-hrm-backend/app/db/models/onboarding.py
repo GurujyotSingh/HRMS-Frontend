@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -60,10 +60,21 @@ class OffboardingRecord(Base):
     initiated_by_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_working_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String, default="IN_PROGRESS", nullable=False)
+    actual_exit_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String, default="INITIATED", nullable=False)
     clearance_status: Mapped[str] = mapped_column(String, default="PENDING", nullable=False)
     initiated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Exit Interview & AI Analysis Fields
+    exit_interview_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_sentiment: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ai_primary_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ai_secondary_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_risk_level: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ai_confidence: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    analyzed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     employee: Mapped["User"] = relationship("User", foreign_keys=[employee_id])
     initiated_by: Mapped["User"] = relationship("User", foreign_keys=[initiated_by_id])

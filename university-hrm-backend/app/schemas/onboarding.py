@@ -58,6 +58,12 @@ class OffboardingInitiate(BaseModel):
     employee_id: str
     reason: Optional[str] = None
     last_working_date: Optional[datetime] = None
+    tasks: Optional[list[OffboardingTaskCreate]] = None
+
+
+class OffboardingTemplateResponse(BaseModel):
+    """Returned when previewing templates for a specific employee."""
+    tasks: list[OffboardingTaskCreate]
 
 
 class OffboardingTaskRead(BaseModel):

@@ -57,9 +57,9 @@ const selectStyles = {
 };
 
 // Debounced search function — waits 300ms before calling API
-const debouncedLoad = debouncePromise(async (inputValue) => {
+const debouncedLoad = debouncePromise(async (inputValue, roleFilter) => {
   try {
-    const { data } = await employeesAPI.search(inputValue || '');
+    const { data } = await employeesAPI.search(inputValue || '', roleFilter);
     const items = data?.data?.items || data?.data || data?.items || data || [];
     return items.map((emp) => ({
       value: emp.id,
@@ -77,11 +77,21 @@ export default function AsyncEmployeeSelect({
   placeholder = 'Type to search employees...',
   required = false,
   isDisabled = false,
+  roleFilter,
   label,
   style,
 }) {
+  const [selectedOption, setSelectedOption] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!value) {
+      setSelectedOption(null);
+    }
+  }, [value]);
+
   const handleChange = useCallback(
     (option) => {
+      setSelectedOption(option);
       onChange?.(option?.value ?? '', option?.employee ?? null);
     },
     [onChange]
@@ -107,9 +117,9 @@ export default function AsyncEmployeeSelect({
       <AsyncSelect
         cacheOptions
         defaultOptions
-        loadOptions={debouncedLoad}
+        loadOptions={(input) => debouncedLoad(input, roleFilter)}
         onChange={handleChange}
-        value={value ? { value } : null}
+        value={selectedOption}
         placeholder={placeholder}
         isDisabled={isDisabled}
         isClearable

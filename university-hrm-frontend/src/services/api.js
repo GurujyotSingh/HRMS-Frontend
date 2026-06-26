@@ -140,7 +140,7 @@ export const employeesAPI = {
   bulkAction: (data) => unwrap(api.post('/employees/bulk', data)),
   exportCsv: (params) => api.get('/employees/export/csv', { params, responseType: 'blob' }),
   // Fixed for 1M+ rows: async employee search for dropdowns — returns max 20 results
-  search: (q, signal) => unwrap(api.get('/employees', { params: { search: q, limit: 20, skip: 0 }, signal })),
+  search: (q, roleFilter, signal) => unwrap(api.get('/employees', { params: { search: q, limit: 20, skip: 0, role: roleFilter }, signal })),
   resetPassword: (id) => unwrap(api.post(`/employees/${id}/reset-password`)),
   // Aliases
   myProfile: () => employeesAPI.me(),
@@ -268,15 +268,17 @@ export const onboardAPI = {
   },
   create: (data) => unwrap(api.post(`/onboarding/hr/employee/${data.employee_id}`, data)),
   addTask: (empId, data) => unwrap(api.post(`/onboarding/hr/employee/${empId}/tasks`, data)),
-  updateTask: (taskId, data) => unwrap(api.post(`/onboarding/my/tasks/${taskId}/complete`)),
+  completeTask: (taskId) => unwrap(api.post(`/onboarding/my/tasks/${taskId}/complete`)),
   hrCompleteTask: (taskId) => unwrap(api.post(`/onboarding/hr/tasks/${taskId}/complete`)),
   deleteTask: (taskId) => api.delete(`/onboarding/tasks/${taskId}`), // Not used in UI but kept for completeness
 
   // Offboarding
   offAll: () => unwrap(api.get('/onboarding/offboarding/all')),
+  getOffboardingTemplate: (empId) => unwrap(api.get(`/onboarding/offboarding/templates/${empId}`)),
   offInitiate: (data) => unwrap(api.post('/onboarding/offboarding/initiate', data)),
   offCompleteTask: (recordId, taskId) =>
     unwrap(api.post(`/onboarding/offboarding/${recordId}/tasks/${taskId}/complete`)),
+  analyzeOffboarding: (recordId) => unwrap(api.post(`/onboarding/offboarding/${recordId}/analyze`)),
 
   // Legacy aliases
   myRecord: () => onboardAPI.getByEmployee('me'),

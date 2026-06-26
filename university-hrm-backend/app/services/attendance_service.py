@@ -49,7 +49,20 @@ async def clock_in(db: AsyncSession, employee_id: str) -> Attendance:
     if existing.scalar_one_or_none():
         raise ValueError("Already checked in today")
 
-    is_late = now.time() > DEFAULT_LATE_THRESHOLD
+    from app.db.models.system_setting import SystemSetting
+    setting = await db.scalar(select(SystemSetting).limit(1))
+    
+    late_threshold = DEFAULT_LATE_THRESHOLD
+    if setting and setting.work_start_time:
+        try:
+            h, m = map(int, setting.work_start_time.split(':'))
+            base_time = datetime.combine(today, time(h, m))
+            threshold = base_time + timedelta(minutes=setting.late_threshold_minutes)
+            late_threshold = threshold.time()
+        except Exception:
+            pass
+
+    is_late = now.time() > late_threshold
 
     record = Attendance(
         id=str(uuid.uuid4()),
@@ -96,7 +109,18 @@ async def clock_out(db: AsyncSession, employee_id: str) -> Attendance:
 async def auto_clock_out_missing(db: AsyncSession) -> int:
     """Auto check-out all employees still checked in at end of day."""
     today = _today()
-    shift_end = datetime.combine(today, DEFAULT_SHIFT_END).replace(tzinfo=TZ)
+    from app.db.models.system_setting import SystemSetting
+    setting = await db.scalar(select(SystemSetting).limit(1))
+    
+    shift_end_time = DEFAULT_SHIFT_END
+    if setting and setting.work_end_time:
+        try:
+            h, m = map(int, setting.work_end_time.split(':'))
+            shift_end_time = time(h, m)
+        except Exception:
+            pass
+            
+    shift_end = datetime.combine(today, shift_end_time).replace(tzinfo=TZ)
 
     result = await db.execute(
         select(Attendance).where(

@@ -47,7 +47,11 @@ async def get_employees(
     if status:
         base_query = base_query.where(User.status == status)
     if role:
-        base_query = base_query.where(User.role == role)
+        if "," in role:
+            roles = [r.strip() for r in role.split(",")]
+            base_query = base_query.where(User.role.in_(roles))
+        else:
+            base_query = base_query.where(User.role == role)
     if search:
         search_term = f"%{search}%"
         base_query = base_query.where(
@@ -142,6 +146,17 @@ async def create_employee(db: AsyncSession, data: dict) -> User:
     
     if data.get("address"):
         addr = data["address"]
+        if addr.get("pincode"):
+            from app.db.models.address import PostalCode
+            existing_postal = await db.scalar(select(PostalCode).where(PostalCode.pincode == addr["pincode"]))
+            if not existing_postal:
+                db.add(PostalCode(
+                    pincode=addr["pincode"],
+                    city=addr.get("city") or "Unknown City",
+                    state=addr.get("state") or "Unknown State",
+                    country=addr.get("country") or "India"
+                ))
+                await db.flush()
         user.address = UserAddress(street=addr.get("street"), campus=addr.get("campus"), pincode=addr.get("pincode"))
         
     if data.get("financials"):

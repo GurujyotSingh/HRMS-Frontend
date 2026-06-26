@@ -6,6 +6,7 @@ import {
 } from '../components/ui';
 import AsyncEmployeeSelect from '../components/ui/AsyncEmployeeSelect';
 import { OnboardingWizard } from '../components/OnboardingWizard';
+import { OffboardingWizard } from '../components/OffboardingWizard';
 import { CheckCircle2, Circle, UserMinus, Eye, Search, FilterX, Users, UserCheck, TrendingUp, Calendar, AlertTriangle } from 'lucide-react';
 
 // Fixed: Added ONBOARDING_REQUIRED_ROLES for correct metric calculations and visibility filtering
@@ -152,25 +153,6 @@ export default function Onboarding() {
 
 
 
-  const handleInitiateOff = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      await onboardAPI.offInitiate({
-        employee_id: offForm.employee_id,
-        reason: offForm.reason,
-        last_working_date: offForm.last_working_date,
-      });
-      toast('Offboarding initiated', 'success');
-      setShowInitOff(false);
-      setOffForm({ employee_id: '', reason: '', last_working_date: '' });
-      loadData();
-    } catch (e) {
-      toast(e.response?.data?.message || 'Failed to initiate offboarding', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -453,45 +435,12 @@ export default function Onboarding() {
         </>
       )}
 
-      {/* Initiate Offboarding Modal */}
-      <Modal open={showInitOff} onClose={() => setShowInitOff(false)} title="Initiate Offboarding" width={500}>
-        <form onSubmit={handleInitiateOff} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ padding: '16px', background: 'var(--gray-50)', borderRadius: '8px', border: '1px solid var(--gray-200)' }}>
-            <AsyncEmployeeSelect
-              label="Select Employee"
-              value={offForm.employee_id}
-              onChange={(val) => setOffForm({ ...offForm, employee_id: val })}
-              required
-            />
-          </div>
-          
-          <Input 
-            label="Last Working Date" 
-            type="date" 
-            value={offForm.last_working_date} 
-            onChange={(e) => setOffForm({ ...offForm, last_working_date: e.target.value })} 
-            required 
-            id="off-last" 
-          />
-          
-          <Textarea 
-            label="Reason for Offboarding" 
-            value={offForm.reason} 
-            onChange={(e) => setOffForm({ ...offForm, reason: e.target.value })} 
-            placeholder="Please provide details regarding the offboarding (e.g. Resignation, End of Contract)..." 
-            required 
-            id="off-reason" 
-            rows={4}
-          />
-          
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 12, paddingTop: 16, borderTop: '1px solid var(--gray-200)' }}>
-            <Btn variant="secondary" type="button" onClick={() => setShowInitOff(false)}>Cancel</Btn>
-            <Btn variant="danger" type="submit" loading={submitting}>
-              <UserMinus size={16} /> Initiate Offboarding
-            </Btn>
-          </div>
-        </form>
-      </Modal>
+      {/* Initiate Offboarding Wizard */}
+      <OffboardingWizard 
+        open={showInitOff} 
+        onClose={() => setShowInitOff(false)} 
+        onSuccess={loadData} 
+      />
 
       {/* View Offboarding Details Modal */}
       {viewOff && (

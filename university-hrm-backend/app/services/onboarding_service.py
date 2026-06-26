@@ -6,6 +6,7 @@ Onboarding service — updated for actual DB schema.
 - PKs are VARCHAR UUID strings
 """
 import uuid
+import json
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -18,6 +19,8 @@ from app.db.models.onboarding import (
     OffboardingRecord, OffboardingTask,
 )
 from app.db.models.user import User
+from app.db.models.employment import UserEmployment
+from app.services.ai.llm_client import call_llm
 
 
 def _utcnow() -> datetime:
@@ -177,24 +180,68 @@ async def complete_onboarding_task(
 
 # ── Offboarding ───────────────────────────────────────────────────────────────
 
-DEFAULT_OFFBOARDING_TASKS = [
-    ("Return ID card",            "Return university ID card to HR"),
-    ("Return laptop / equipment", "Return all university-owned devices"),
-    ("Clear dues / library",      "Clear any pending dues or library books"),
-    ("Handover pending work",     "Document and handover all pending tasks"),
-    ("Exit interview",            "Complete exit interview with HR"),
-    ("Final settlement",          "HR processes final salary settlement"),
-    ("Deactivate accounts",       "IT deactivates email and system access"),
-]
+def get_offboarding_template(role: str, department: str) -> list[tuple[str, str]]:
+    """Returns a deterministic list of offboarding tasks based on role and department."""
+    # Universal tasks
+    tasks = [
+        ("Return Laptop", "Return university-owned laptop to IT"),
+        ("Return ID Card", "Return physical access/ID card to Security"),
+        ("Revoke Email Access", "IT to disable primary email account"),
+        ("Exit Interview Completion", "Schedule and complete HR exit interview"),
+        ("HR Final Clearance", "HR sign-off on all administrative items"),
+    ]
+
+    dept_upper = (department or "").upper()
+    role_upper = (role or "").upper()
+
+    # Faculty Template
+    if role_upper in ["FACULTY", "PROFESSOR"] or "ACADEMIC" in dept_upper:
+        tasks.extend([
+            ("Submit Final Grades", "Ensure all course grades are published"),
+            ("Transfer Course Materials", "Handover syllabus and course assets to department head"),
+            ("Handover Research Projects", "Transfer PI status or data for active research"),
+            ("Return Department Assets", "Return specific lab/department equipment"),
+        ])
+    
+    # Finance Template
+    elif "FINANCE" in dept_upper or "ACCOUNT" in dept_upper:
+        tasks.extend([
+            ("Transfer Financial Responsibilities", "Handover pending invoices or budgets"),
+            ("Revoke Finance System Access", "Remove access to accounting software"),
+            ("Verify Pending Transactions", "Clear any pending approvals"),
+        ])
+
+    # IT Template
+    elif "IT" in dept_upper or "ENGINEER" in role_upper:
+        tasks.extend([
+            ("Revoke GitHub Access", "Remove from organization GitHub"),
+            ("Revoke Cloud Access", "Remove AWS/GCP/Azure access"),
+            ("Transfer System Ownership", "Reassign ownership of active systems"),
+            ("Archive Development Assets", "Commit and push all local code"),
+        ])
+
+    # Administrative Staff Template
+    else:
+        tasks.extend([
+            ("Transfer Records", "Handover physical and digital records"),
+            ("Handover Administrative Documents", "Provide status of all ongoing administrative tasks"),
+            ("Department Clearance", "Final clearance from department head"),
+        ])
+
+    return tasks
 
 
 async def initiate_offboarding(
     db: AsyncSession, employee_id: str, initiated_by_id: str,
     reason: Optional[str] = None, last_working_date: Optional[datetime] = None,
+    tasks_input: Optional[list] = None,
 ) -> OffboardingRecord:
     # Check employee exists
-    emp_result = await db.execute(select(User).where(User.id == employee_id))
-    if not emp_result.scalar_one_or_none():
+    emp_result = await db.execute(
+        select(User).options(selectinload(User.employment).selectinload(UserEmployment.department)).where(User.id == employee_id)
+    )
+    employee = emp_result.scalar_one_or_none()
+    if not employee:
         raise ValueError(f"Employee {employee_id} does not exist")
 
     # Check if already offboarding
@@ -211,27 +258,40 @@ async def initiate_offboarding(
         initiated_by_id=initiated_by_id,
         reason=reason,
         last_working_date=last_working_date,
-        status="IN_PROGRESS",  # enum fix
-        clearance_status="PENDING",  # enum fix
+        status="INITIATED",
+        clearance_status="PENDING",
         initiated_at=now,
     )
     db.add(record)
     await db.flush()
 
-    for title, desc in DEFAULT_OFFBOARDING_TASKS:
-        task = OffboardingTask(
-            id=str(uuid.uuid4()),
-            offboarding_record_id=record.id,
-            title=title,
-            description=desc,
-        )
-        db.add(task)
+    if tasks_input is not None:
+        for t in tasks_input:
+            task = OffboardingTask(
+                id=str(uuid.uuid4()),
+                offboarding_record_id=record.id,
+                title=t.title,
+                description=t.description,
+            )
+            db.add(task)
+    else:
+        dept_name = employee.employment.department.name if employee.employment and employee.employment.department else ""
+        template_tasks = get_offboarding_template(employee.role, dept_name)
+        for title, desc in template_tasks:
+            task = OffboardingTask(
+                id=str(uuid.uuid4()),
+                offboarding_record_id=record.id,
+                title=title,
+                description=desc,
+            )
+            db.add(task)
 
     await db.commit()
 
     result = await db.execute(
         select(OffboardingRecord)
         .options(selectinload(OffboardingRecord.tasks))
+        .options(selectinload(OffboardingRecord.employee))
         .where(OffboardingRecord.id == record.id)
     )
     return result.scalar_one()
@@ -241,6 +301,7 @@ async def get_all_offboarding_records(db: AsyncSession) -> list[OffboardingRecor
     result = await db.execute(
         select(OffboardingRecord)
         .options(selectinload(OffboardingRecord.tasks))
+        .options(selectinload(OffboardingRecord.employee))
         .order_by(OffboardingRecord.initiated_at.desc())
     )
     return result.scalars().all()
@@ -252,6 +313,7 @@ async def get_offboarding_by_employee(
     result = await db.execute(
         select(OffboardingRecord)
         .options(selectinload(OffboardingRecord.tasks))
+        .options(selectinload(OffboardingRecord.employee))
         .where(OffboardingRecord.employee_id == employee_id)
     )
     return result.scalar_one_or_none()
@@ -276,6 +338,7 @@ async def complete_offboarding_task(
     record_result = await db.execute(
         select(OffboardingRecord)
         .options(selectinload(OffboardingRecord.tasks))
+        .options(selectinload(OffboardingRecord.employee))
         .where(OffboardingRecord.id == offboarding_record_id)
     )
     record = record_result.scalar_one()
@@ -300,3 +363,87 @@ async def update_clearance_status(
     record.clearance_status = clearance_status
     await db.commit()
     return await get_offboarding_by_employee(db, employee_id)
+
+async def analyze_exit_interview(db: AsyncSession, record_id: str) -> dict:
+    """Send exit interview notes to AI and store structured results."""
+    result = await db.execute(select(OffboardingRecord).where(OffboardingRecord.id == record_id))
+    record = result.scalar_one_or_none()
+    
+    if not record:
+        raise ValueError("Offboarding record not found")
+        
+    if not record.exit_interview_notes or not record.exit_interview_notes.strip():
+        raise ValueError("Exit interview notes are required before AI analysis can be performed.")
+
+    system_prompt = """Analyze the following employee exit interview notes.
+
+Return ONLY valid JSON.
+
+Schema:
+{
+  "sentiment": "Positive | Neutral | Negative",
+  "primary_reason": "",
+  "secondary_reason": "",
+  "risk_level": "Low | Medium | High",
+  "confidence": 0,
+  "summary": ""
+}
+
+Allowed reasons:
+- Compensation
+- Career Growth
+- Management
+- Work-Life Balance
+- Relocation
+- Education
+- Retirement
+- Personal Reasons
+- Organizational Changes
+- Job Satisfaction
+- Other
+
+Rules:
+- Confidence must be 0-100.
+- Summary must be concise.
+- Return JSON only.
+"""
+
+    messages = [
+        {"role": "user", "content": f"Exit Interview Notes:\n\n{record.exit_interview_notes}"}
+    ]
+
+    ai_response = await call_llm(messages=messages, system=system_prompt)
+    content = ai_response.get("content", "")
+
+    if content.startswith("```json"):
+        content = content[7:]
+    elif content.startswith("```"):
+        content = content[3:]
+    if content.endswith("```"):
+        content = content[:-3]
+    content = content.strip()
+
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        raise ValueError("AI failed to return valid JSON. Please try again.")
+
+    record.ai_sentiment = parsed.get("sentiment", "Neutral")
+    record.ai_primary_reason = parsed.get("primary_reason", "Other")
+    record.ai_secondary_reason = parsed.get("secondary_reason", None)
+    record.ai_risk_level = parsed.get("risk_level", "Medium")
+    record.ai_summary = parsed.get("summary", "")
+    record.ai_confidence = parsed.get("confidence", 0)
+    record.analyzed_at = _utcnow()
+
+    await db.commit()
+    await db.refresh(record)
+    
+    return {
+        "sentiment": record.ai_sentiment,
+        "primary_reason": record.ai_primary_reason,
+        "secondary_reason": record.ai_secondary_reason,
+        "risk_level": record.ai_risk_level,
+        "confidence": record.ai_confidence,
+        "summary": record.ai_summary
+    }

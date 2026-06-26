@@ -9,11 +9,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_role
 from app.db.models.role import RoleEnum
 from app.db.models.user import User
+from app.db.models.employment import UserEmployment
 from app.db.session import get_db
 from app.services import onboarding_service
 
@@ -47,6 +50,13 @@ class OnboardingOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EmployeeSummary(BaseModel):
+    id: str
+    first_name: str
+    last_name: str
+    email: str
+    model_config = {"from_attributes": True}
+
 class OffboardingOut(BaseModel):
     id: str
     employee_id: str
@@ -58,6 +68,7 @@ class OffboardingOut(BaseModel):
     initiated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     tasks: list[TaskOut] = []
+    employee: Optional[EmployeeSummary] = None
 
     model_config = {"from_attributes": True}
 
@@ -67,11 +78,28 @@ class AddTaskBody(BaseModel):
     description: Optional[str] = None
 
 
+class OffboardingTaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+
 class OffboardingInitiate(BaseModel):
     employee_id: str
     reason: Optional[str] = None
     last_working_date: Optional[datetime] = None
+    tasks: Optional[list[OffboardingTaskCreate]] = None
 
+class OffboardingTemplateResponse(BaseModel):
+    tasks: list[OffboardingTaskCreate]
+
+class OffboardingAnalysisResponse(BaseModel):
+    sentiment: str
+    primary_reason: str
+    secondary_reason: Optional[str] = None
+    risk_level: str
+    confidence: int
+    summary: str
+    
+    model_config = {"from_attributes": True}
 
 class ClearanceUpdate(BaseModel):
     clearance_status: str   # pending | cleared | hold
@@ -188,6 +216,26 @@ async def hr_add_task(
 
 # ── Offboarding ───────────────────────────────────────────────────────────────
 
+@router.get("/offboarding/templates/{employee_id}", response_model=OffboardingTemplateResponse)
+async def get_offboarding_template_preview(
+    employee_id: str,
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """HR/Admin: get the deterministic template tasks for an employee before initiating."""
+    emp_result = await db.execute(
+        select(User).options(selectinload(User.employment).selectinload(UserEmployment.department)).where(User.id == employee_id)
+    )
+    employee = emp_result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    dept_name = employee.employment.department.name if employee.employment and getattr(employee.employment, 'department', None) else ""
+    tasks = onboarding_service.get_offboarding_template(employee.role, dept_name)
+    
+    return {"tasks": [{"title": t[0], "description": t[1]} for t in tasks]}
+
+
 @router.post("/offboarding/initiate", response_model=OffboardingOut)
 async def initiate_offboarding(
     data: OffboardingInitiate,
@@ -197,7 +245,7 @@ async def initiate_offboarding(
     """HR/Admin: initiate offboarding for an employee."""
     try:
         return await onboarding_service.initiate_offboarding(
-            db, data.employee_id, current_user.id, data.reason, data.last_working_date
+            db, data.employee_id, current_user.id, data.reason, data.last_working_date, data.tasks
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -224,7 +272,17 @@ async def hr_employee_offboarding(
         raise HTTPException(status_code=404, detail="No offboarding record found")
     return record
 
-
+@router.post("/offboarding/{record_id}/analyze", response_model=OffboardingAnalysisResponse)
+async def analyze_offboarding(
+    record_id: str,
+    current_user: User = Depends(require_role(RoleEnum.HR, RoleEnum.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """HR/Admin: analyze exit interview notes for an offboarding record."""
+    try:
+        return await onboarding_service.analyze_exit_interview(db, record_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 @router.post("/offboarding/{record_id}/tasks/{task_id}/complete", response_model=OffboardingOut)
 async def complete_offboarding_task(
     record_id: str,

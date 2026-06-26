@@ -31,6 +31,7 @@ const DESIGNATIONS = {
 export default function AddEmployeeWizard({ open, onClose, onSuccess }) {
   const [step, setStep] = useState(1);
   const [departments, setDepartments] = useState([]);
+  const [roleCounts, setRoleCounts] = useState({});
   const [loadingDepts, setLoadingDepts] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [roleFilter, setRoleFilter] = useState('ALL');
@@ -80,6 +81,7 @@ export default function AddEmployeeWizard({ open, onClose, onSuccess }) {
   useEffect(() => {
     if (open) {
       loadDepts();
+      loadRoleCounts();
       setStep(1);
       setForm({
         role: '', staff_category: '', first_name: '', last_name: '', phone: '', gender: '', date_of_birth: '', street: '', city: '', state: '', country: '', pincode: '', emergency_name: '', emergency_relation: '', emergency_phone: '', personal_email: '', email: '', department_id: '', designation: '', reporting_manager_id: '', join_date: new Date().toISOString().split('T')[0], employment_type: 'FULL_TIME', employee_id: '', pan_number: '', uan_number: '', ifsc_code: '', bank_account_number: '', bank_name: ''
@@ -96,6 +98,23 @@ export default function AddEmployeeWizard({ open, onClose, onSuccess }) {
       toast('Failed to load departments', 'error');
     } finally {
       setLoadingDepts(false);
+    }
+  };
+
+  const loadRoleCounts = async () => {
+    try {
+      const counts = {};
+      await Promise.all(
+        ROLES.map(async (r) => {
+          try {
+            const res = await employeesAPI.list({ role: r.id, limit: 1 });
+            counts[r.id] = res.data?.total || 0;
+          } catch (e) {}
+        })
+      );
+      setRoleCounts(counts);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -339,8 +358,15 @@ export default function AddEmployeeWizard({ open, onClose, onSuccess }) {
                       <div style={{ color: form.role === r.id ? 'var(--primary)' : 'var(--gray-500)', marginBottom: 12 }}>{r.icon}</div>
                       <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', marginBottom: 4 }}>{r.label}</div>
                       <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>{r.desc}</div>
-                      <div style={{ marginTop: 12, display: 'inline-block', fontSize: 11, padding: '2px 8px', background: 'var(--gray-100)', borderRadius: 4, color: 'var(--gray-600)', fontWeight: 500 }}>
-                        {r.cat.replace('_', ' ')}
+                      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'inline-block', fontSize: 11, padding: '2px 8px', background: 'var(--gray-100)', borderRadius: 4, color: 'var(--gray-600)', fontWeight: 500 }}>
+                          {r.cat.replace('_', ' ')}
+                        </div>
+                        {roleCounts[r.id] !== undefined && (
+                          <div style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+                            {roleCounts[r.id]} {roleCounts[r.id] === 1 ? 'employee' : 'employees'}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -368,11 +394,11 @@ export default function AddEmployeeWizard({ open, onClose, onSuccess }) {
 
                 <h4 style={{ fontSize: 15, marginTop: 32, marginBottom: 16, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}><MapPin size={16}/> Address</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <Input label="Pincode" value={form.pincode} onBlur={handlePincodeBlur} onChange={e => setForm({...form, pincode: e.target.value})} placeholder="Enter pincode to auto-fill" />
                   <Input label="Street Address" style={{ gridColumn: 'span 2' }} value={form.street} onChange={e => setForm({...form, street: e.target.value})} />
-                  <Input label="City" value={form.city} onChange={e => setForm({...form, city: e.target.value})} />
-                  <Input label="State" value={form.state} onChange={e => setForm({...form, state: e.target.value})} />
-                  <Input label="Country" value={form.country} onChange={e => setForm({...form, country: e.target.value})} />
-                  <Input label="Pincode" value={form.pincode} onBlur={handlePincodeBlur} onChange={e => setForm({...form, pincode: e.target.value})} />
+                  <Input label="City" value={form.city} onChange={e => setForm({...form, city: e.target.value})} disabled />
+                  <Input label="State" value={form.state} onChange={e => setForm({...form, state: e.target.value})} disabled />
+                  <Input label="Country" value={form.country} onChange={e => setForm({...form, country: e.target.value})} disabled />
                 </div>
 
                 <h4 style={{ fontSize: 15, marginTop: 32, marginBottom: 16, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}><ShieldAlert size={16}/> Emergency Contact</h4>
@@ -462,6 +488,7 @@ export default function AddEmployeeWizard({ open, onClose, onSuccess }) {
                   value={form.reporting_manager_id} 
                   onChange={v => setForm({...form, reporting_manager_id: v})} 
                   placeholder="Search by name or email..."
+                  roleFilter="DIRECTOR,HR_MANAGER,SUPER_ADMIN"
                 />
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
